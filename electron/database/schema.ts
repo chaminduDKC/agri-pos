@@ -1,0 +1,255 @@
+// schema.ts — UUID version
+// ─────────────────────────────────────────────────────────────
+// WHY UUID INSTEAD OF AUTOINCREMENT?
+//
+//   This app works offline. Multiple devices can create records
+//   simultaneously without internet. If two devices both create
+//   a client offline, auto-increment would give both id=1 —
+//   a conflict when syncing to the cloud.
+//
+//   UUID (e.g. 'f47ac10b-58cc-4372-a567-0e02b2c3d479') is
+//   statistically guaranteed unique across all devices forever.
+//   Generated in Node.js via: import { randomUUID } from 'crypto'
+//
+//   We store it as TEXT in SQLite since SQLite has no UUID type.
+//
+// ─────────────────────────────────────────────────────────────
+// WHY THIS FILE EXISTS:
+//   All CREATE TABLE statements live here, separated from the
+//   connection logic. This keeps db.ts clean and makes it easy
+//   to read/edit the schema without touching anything else.
+//
+// ORDER MATTERS — tables must be created before tables that
+// reference them via FOREIGN KEY. Layer 1 → 2 → 3 → 4.
+// ─────────────────────────────────────────────────────────────
+
+export const SCHEMA_VERSION = 1
+// Bump this number when you change the schema in future.
+// The migration system in migrations.ts uses this to know
+// whether to run updates.
+
+export const schema = `
+
+-- ════════════════════════════════
+--  LAYER 1 — FOUNDATION TABLES
+--  No foreign keys — nothing depends on these existing first
+-- ════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT     PRIMARY KEY,
+  name          TEXT     NOT NULL,
+  email         TEXT     NOT NULL UNIQUE,
+  password_hash TEXT     NOT NULL,
+  role          TEXT     NOT NULL
+                         CHECK(role IN ('admin','manager','worker')),
+  is_active     INTEGER  DEFAULT 1,   -- 1 = active, 0 = deactivated
+  created_at    TEXT     DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS clients (
+  id          TEXT     PRIMARY KEY,
+  name        TEXT     NOT NULL,
+  phone       TEXT,
+  email       TEXT,
+  address     TEXT,
+  notes       TEXT,
+  created_at  TEXT     DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS items (
+  id                  TEXT     PRIMARY KEY,
+  name                TEXT     NOT NULL,
+  category            TEXT,
+  unit                TEXT     NOT NULL,   -- 'meters', 'units', 'kg'
+  quantity            REAL     DEFAULT 0,
+  low_stock_threshold REAL     DEFAULT 5,
+  barcode             TEXT     UNIQUE,     -- scanned from product label
+  supplier            TEXT,
+  unit_price          REAL     DEFAULT 0,
+  updated_at          TEXT     DEFAULT (datetime('now'))
+);
+
+
+-- ════════════════════════════════
+--  LAYER 2 — CORE BUSINESS
+--  Depends on Layer 1 tables
+-- ════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS projects (
+  id          TEXT     PRIMARY KEY,
+  client_id   TEXT     NOT NULL REFERENCES clients(id),
+  created_by  TEXT     NOT NULL REFERENCES users(id),
+  title       TEXT     NOT NULL,
+  location    TEXT,
+  status      TEXT     DEFAULT 'pending'
+                       CHECK(status IN ('pending','active','completed','cancelled')),
+  start_date  TEXT,
+  end_date    TEXT,
+  notes       TEXT,
+  created_at  TEXT     DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS quotations (
+  id            TEXT     PRIMARY KEY,
+  client_id     TEXT     NOT NULL REFERENCES clients(id),
+  project_id    TEXT     REFERENCES projects(id),  -- optional at creation
+  created_by    TEXT     NOT NULL REFERENCES users(id),
+  status        TEXT     DEFAULT 'draft'
+                         CHECK(status IN ('draft','sent','approved','rejected')),
+  total_amount  REAL     DEFAULT 0,
+  valid_until   TEXT,
+  notes         TEXT,
+  created_at    TEXT     DEFAULT (datetime('now'))
+);
+
+-- WHY A SEPARATE TABLE for quotation lines?
+-- A quotation has many items. You never store a list inside one row.
+-- Each item line gets its own row here. This is the header-detail pattern.
+CREATE TABLE IF NOT EXISTS quotation_items (
+  id            TEXT     PRIMARY KEY,
+  quotation_id  TEXT     NOT NULL REFERENCES quotations(id)
+                         ON DELETE CASCADE,  -- delete lines when quote deleted
+  item_id       TEXT     REFERENCES items(id),
+  item_name     TEXT     NOT NULL,  -- snapshot: name at time of quoting
+  quantity      REAL     NOT NULL,
+  unit_price    REAL     NOT NULL,  -- snapshot: price at time of quoting
+  labor_cost    REAL     DEFAULT 0
+);
+
+
+-- ════════════════════════════════
+--  LAYER 3 — TRANSACTIONS
+--  Depends on Layer 1 + 2 tables
+-- ════════════════════════════════
+
+-- WHY WORKERS separate from USERS?
+-- Not every user is a field worker. An admin manages the app.
+-- WORKERS extends a user with field-specific info (daily rate, NIC).
+CREATE TABLE IF NOT EXISTS workers (
+  id           TEXT     PRIMARY KEY,
+  user_id      TEXT     NOT NULL UNIQUE REFERENCES users(id),
+  nic          TEXT     UNIQUE,   -- national identity card
+  daily_rate   REAL     NOT NULL DEFAULT 0,
+  phone        TEXT,
+  address      TEXT,
+  joined_date  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS attendance (
+  id             TEXT     PRIMARY KEY,
+  worker_id      TEXT     NOT NULL REFERENCES workers(id),
+  project_id     TEXT     NOT NULL REFERENCES projects(id),
+  work_date      TEXT     NOT NULL,
+  hours_worked   REAL     DEFAULT 8,
+  overtime_hours REAL     DEFAULT 0,
+  status         TEXT     DEFAULT 'present'
+                          CHECK(status IN ('present','absent','half-day')),
+  notes          TEXT,
+  -- Prevents logging the same worker on the same project twice on one day
+  UNIQUE(worker_id, project_id, work_date)
+);
+
+-- WHY store total_amount and daily_rate here?
+-- SNAPSHOT PATTERN: once a paysheet is approved, these numbers must
+-- be frozen. If the worker's daily_rate changes tomorrow, old
+-- paysheets must not change. Store, don't recalculate.
+CREATE TABLE IF NOT EXISTS paysheets (
+  id            TEXT     PRIMARY KEY,
+  worker_id     TEXT     NOT NULL REFERENCES workers(id),
+  project_id    TEXT     REFERENCES projects(id),
+  approved_by   TEXT     REFERENCES users(id),
+  period_start  TEXT     NOT NULL,
+  period_end    TEXT     NOT NULL,
+  total_days    REAL     DEFAULT 0,
+  daily_rate    REAL     NOT NULL,  -- snapshot at time of payment
+  overtime_pay  REAL     DEFAULT 0,
+  total_amount  REAL     NOT NULL,
+  status        TEXT     DEFAULT 'draft'
+                         CHECK(status IN ('draft','approved','paid')),
+  created_at    TEXT     DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS material_issues (
+  id                TEXT     PRIMARY KEY,
+  project_id        TEXT     NOT NULL REFERENCES projects(id),
+  item_id           TEXT     NOT NULL REFERENCES items(id),
+  issued_by         TEXT     NOT NULL REFERENCES users(id),
+  quantity_issued   REAL     NOT NULL,
+  quantity_returned REAL     DEFAULT 0,  -- unused items returned to stock
+  issue_date        TEXT     DEFAULT (date('now')),
+  notes             TEXT
+);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id              TEXT     PRIMARY KEY,
+  project_id      TEXT     NOT NULL REFERENCES projects(id),
+  client_id       TEXT     NOT NULL REFERENCES clients(id),
+  quotation_id    TEXT     REFERENCES quotations(id),
+  amount_due      REAL     NOT NULL,
+  amount_paid     REAL     DEFAULT 0,
+  payment_status  TEXT     DEFAULT 'pending'
+                           CHECK(payment_status IN ('pending','partial','paid')),
+  due_date        TEXT,
+  notes           TEXT,
+  created_at      TEXT     DEFAULT (datetime('now'))
+);
+
+
+-- ════════════════════════════════
+--  LAYER 4 — SYSTEM TABLES
+-- ════════════════════════════════
+
+-- OUTBOX PATTERN for offline sync:
+-- Every INSERT/UPDATE/DELETE in your app also writes a row here.
+-- When internet is back, read WHERE synced=0 and push to cloud.
+-- Mark synced=1 after successful upload.
+CREATE TABLE IF NOT EXISTS sync_log (
+  id          TEXT     PRIMARY KEY,
+  table_name  TEXT     NOT NULL,
+  record_id   TEXT     NOT NULL,
+  operation   TEXT     NOT NULL
+              CHECK(operation IN ('INSERT','UPDATE','DELETE')),
+  payload     TEXT,               -- JSON snapshot of the changed record
+  synced      INTEGER  DEFAULT 0, -- 0 = pending, 1 = done
+  created_at  TEXT     DEFAULT (datetime('now'))
+);
+
+-- Tracks which schema version this database is on.
+-- Used by the migration system to know what to upgrade.
+CREATE TABLE IF NOT EXISTS meta (
+  key    TEXT  PRIMARY KEY,
+  value  TEXT
+);
+
+
+-- ════════════════════════════════
+--  INDEXES
+--  Speed up your most common queries
+-- ════════════════════════════════
+
+-- "Get all projects for client X"
+CREATE INDEX IF NOT EXISTS idx_projects_client
+  ON projects(client_id);
+
+-- "Get all quotes for client X"
+CREATE INDEX IF NOT EXISTS idx_quotations_client
+  ON quotations(client_id);
+
+-- "Get all materials issued to project X"
+CREATE INDEX IF NOT EXISTS idx_material_project
+  ON material_issues(project_id);
+
+-- "Get attendance for worker X"
+CREATE INDEX IF NOT EXISTS idx_attendance_worker
+  ON attendance(worker_id);
+
+-- "Get all unsynced rows" — most important sync query
+CREATE INDEX IF NOT EXISTS idx_sync_pending
+  ON sync_log(synced)
+  WHERE synced = 0;
+
+-- "Find item by barcode" — used during scanning
+CREATE INDEX IF NOT EXISTS idx_items_barcode
+  ON items(barcode);
+
+`
