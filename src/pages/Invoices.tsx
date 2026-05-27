@@ -287,34 +287,225 @@ export default function Invoices() {
     </div>
   )
 }
-
 const s: Record<string, React.CSSProperties> = {
-  page:         { maxWidth: 1100 },
-  header:       { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 },
-  title:        { fontSize:22, fontWeight:600, margin:0 },
-  sub:          { fontSize:13, color:'#888', marginTop:3 },
-  summaryRow:   { display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:12, marginBottom:20 },
-  summaryCard:  { background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:'14px 18px' },
-  summaryLabel: { fontSize:12, color:'#6b7280', margin:'0 0 4px' },
-  summaryValue: { fontSize:20, fontWeight:600, margin:0 },
-  tabs:         { display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid #e5e7eb' },
-  tab:          { padding:'8px 14px', fontSize:13, border:'none', background:'transparent', cursor:'pointer', color:'#6b7280', borderBottom:'2px solid transparent', marginBottom:-1, display:'flex', gap:6, alignItems:'center' },
-  tabActive:    { color:'#4f46e5', borderBottomColor:'#4f46e5', fontWeight:500 },
-  tabCount:     { fontSize:11, background:'#f3f4f6', color:'#6b7280', padding:'1px 6px', borderRadius:10 },
-  muted:        { color:'#9ca3af', fontSize:14, padding:'20px 0' },
-  tableWrap:    { background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' },
-  table:        { width:'100%', borderCollapse:'collapse', fontSize:13 },
-  th:           { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5, borderBottom:'1px solid #e5e7eb', background:'#f9fafb' },
-  td:           { padding:'11px 14px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
-  badge:        { fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500 },
-  btnPrimary:   { padding:'9px 16px', background:'#4f46e5', color:'#fff', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:500 },
-  btnSm:        { padding:'5px 10px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:6, fontSize:12, cursor:'pointer' },
-  overlay:      { position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 },
-  modal:        { background:'#fff', borderRadius:12, padding:28, width:'100%', maxWidth:520, boxShadow:'0 20px 60px rgba(0,0,0,0.12)', maxHeight:'90vh', overflowY:'auto' },
-  modalTitle:   { fontSize:16, fontWeight:600, margin:'0 0 16px' },
-  modalActions: { display:'flex', justifyContent:'flex-end', gap:8, marginTop:20 },
-  grid2:        { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
-  label:        { display:'block', fontSize:12, fontWeight:500, color:'#374151', marginTop:12, marginBottom:4 },
-  input:        { width:'100%', padding:'8px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box' },
-  err:          { color:'#dc2626', fontSize:13, marginBottom:10 },
-}
+  page: { margin: '0 auto', maxWidth: 1200 },
+
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    margin: 0,
+    color: '#e5e7eb'
+  },
+
+  sub: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginTop: 3
+  },
+
+  summaryRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: 12,
+    marginBottom: 20
+  },
+
+  summaryCard: {
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 10,
+    padding: '14px 18px'
+  },
+
+  summaryLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    margin: '0 0 4px'
+  },
+
+  summaryValue: {
+    fontSize: 20,
+    fontWeight: 600,
+    margin: 0,
+    color: '#f3f4f6'
+  },
+
+  tabs: {
+    display: 'flex',
+    gap: 4,
+    marginBottom: 16,
+    borderBottom: '1px solid #2c3443'
+  },
+
+  tab: {
+    padding: '8px 14px',
+    fontSize: 13,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    color: '#9ca3af',
+    borderBottom: '2px solid transparent',
+    marginBottom: -1,
+    display: 'flex',
+    gap: 6,
+    alignItems: 'center'
+  },
+
+  tabActive: {
+    color: '#818cf8',
+    borderBottomColor: '#818cf8',
+    fontWeight: 500
+  },
+
+  tabCount: {
+    fontSize: 11,
+    background: '#2c3443',
+    color: '#9ca3af',
+    padding: '1px 6px',
+    borderRadius: 10
+  },
+
+  muted: {
+    color: '#6b7280',
+    fontSize: 14,
+    padding: '20px 0'
+  },
+
+  tableWrap: {
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 10,
+    overflow: 'hidden'
+  },
+
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 13
+  },
+
+  th: {
+    padding: '10px 14px',
+    textAlign: 'left',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    borderBottom: '1px solid #2c3443',
+    background: '#1e2430'
+  },
+
+  td: {
+    padding: '11px 14px',
+    borderBottom: '1px solid #2c3443',
+    verticalAlign: 'middle',
+    color: '#e5e7eb'
+  },
+
+  badge: {
+    fontSize: 11,
+    padding: '3px 10px',
+    borderRadius: 20,
+    fontWeight: 500,
+    background: '#2c3443',
+    color: '#9ca3af'
+  },
+
+  btnPrimary: {
+    padding: '9px 16px',
+    background: '#6366f1',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    fontSize: 13,
+    cursor: 'pointer',
+    fontWeight: 500
+  },
+
+  btnSm: {
+    padding: '5px 10px',
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 6,
+    fontSize: 12,
+    cursor: 'pointer',
+    color: '#e5e7eb'
+  },
+
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100
+  },
+
+  modal: {
+    background: '#232a36',
+    borderRadius: 12,
+    padding: 28,
+    width: '100%',
+    maxWidth: 520,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    border: '1px solid #2c3443'
+  },
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: '0 0 16px',
+    color: '#e5e7eb'
+  },
+
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 20
+  },
+
+  grid2: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12
+  },
+
+  label: {
+    display: 'block',
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#9ca3af',
+    marginTop: 12,
+    marginBottom: 4
+  },
+
+  input: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 14,
+    border: '1px solid #2c3443',
+    borderRadius: 6,
+    boxSizing: 'border-box',
+    background: '#1e2430',
+    color: '#e5e7eb',
+    outline: 'none'
+  },
+
+  err: {
+    color: '#f87171',
+    fontSize: 13,
+    marginBottom: 10
+  }
+};

@@ -164,8 +164,8 @@ export default function Dashboard() {
               return (
                 <div key={status}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
-                    <span style={{ textTransform: 'capitalize', color: '#374151' }}>{status}</span>
-                    <span style={{ fontWeight: 500 }}>{count}</span>
+                    <span style={{ textTransform: 'capitalize', color: '#afc2e4' }}>{status}</span>
+                    <span style={{ fontWeight: 500, color: '#afc2e4' }}>{count}</span>
                   </div>
                   <div style={s.progressTrack}>
                     <div style={{ ...s.progressBar, width: `${pct}%`, background: STATUS_COLORS[status] }} />
@@ -280,39 +280,214 @@ function StatCard({ label, value, total, sub, subColor, color, onClick }: {
 
 // ── Styles ────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
-  page:         { maxWidth: 1100 },
-  loading:      { padding: 40, color: '#888', fontSize: 14 },
-  err:          { padding: 40, color: '#dc2626', fontSize: 14 },
+  page: { margin: '0 auto' },
 
-  statsGrid:    { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 },
-  statCard:     { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', display: 'flex', transition: 'box-shadow .15s' },
-  statAccent:   { width: 4, flexShrink: 0 },
-  statBody:     { padding: '14px 16px', flex: 1 },
-  statLabel:    { fontSize: 12, color: '#6b7280', margin: '0 0 6px' },
-  statValue:    { fontSize: 28, fontWeight: 700, margin: 0, lineHeight: 1 },
-  statSub:      { fontSize: 11, color: '#9ca3af', marginTop: 4 },
+  loading: {
+    padding: 40,
+    color: 'var(--text-muted)',
+    fontSize: 14
+  },
 
-  finRow:       { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 },
-  finCard:      { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '18px 20px' },
-  finLabel:     { fontSize: 12, color: '#6b7280', margin: '0 0 6px', fontWeight: 500 },
-  finValue:     { fontSize: 24, fontWeight: 700, margin: '0 0 4px' },
-  finSub:       { fontSize: 12, color: '#9ca3af', margin: 0 },
-  progressTrack:{ height: 6, background: '#f3f4f6', borderRadius: 3, overflow: 'hidden', marginTop: 10 },
-  progressBar:  { height: '100%', background: '#6366f1', borderRadius: 3, transition: 'width .3s' },
+  err: {
+    padding: 40,
+    color: 'var(--danger)',
+    fontSize: 14
+  },
 
-  bottomRow:    { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 },
-  panel:        { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 18px' },
-  panelHeader:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  panelTitle:   { fontSize: 13, fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: 6 },
-  linkBtn:      { fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 },
-  empty:        { fontSize: 13, color: '#9ca3af', padding: '12px 0' },
+  // ── Stats
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: 20,
+    marginBottom: 16
+  },
 
-  listRow:      { display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #f3f4f6' },
-  rowTitle:     { fontSize: 13, fontWeight: 500, margin: 0 },
-  rowSub:       { fontSize: 11, color: '#9ca3af', margin: '2px 0 0' },
-  dot:          { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
+  statCard: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    overflow: 'hidden',
+    display: 'flex',
+    transition: 'box-shadow .15s',
+  },
 
-  alertBadge:   { fontSize: 10, padding: '1px 6px', borderRadius: 10, background: '#fee2e2', color: '#dc2626', fontWeight: 600 },
-  lowBadge:     { fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#fee2e2', color: '#dc2626', fontWeight: 600, flexShrink: 0 },
-  badge:        { fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 500, flexShrink: 0 },
-}
+  statAccent: { width: 4, flexShrink: 0 },
+
+  statBody: { padding: '14px 16px', flex: 1 },
+
+  statLabel: {
+    fontSize: 18,
+    color: 'var(--text-muted)',
+    margin: '0 0 6px'
+  },
+
+  statValue: {
+    fontSize: 28,
+    fontWeight: 700,
+    margin: 0,
+    lineHeight: 1,
+    color: 'var(--text)'
+  },
+
+  statSub: {
+    fontSize: 15,
+    color: 'var(--text-dim)',
+    marginTop: 4
+  },
+
+  // ── Financial
+  finRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: 20,
+    marginBottom: 16
+  },
+
+  finCard: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    padding: '18px 20px'
+  },
+
+  finLabel: {
+    fontSize: 15,
+    color: 'var(--text-muted)',
+    margin: '0 0 6px',
+    fontWeight: 500
+  },
+
+  finValue: {
+    fontSize: 24,
+    fontWeight: 700,
+    margin: '0 0 4px',
+    color: 'var(--text)'
+  },
+
+  finSub: {
+    fontSize: 14,
+    color: 'var(--text-dim)',
+    margin: 0
+  },
+
+  // ── Progress
+  progressTrack: {
+    height: 6,
+    background: 'var(--surface-2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginTop: 10
+  },
+
+  progressBar: {
+    height: '100%',
+    background: 'var(--primary)',
+    borderRadius: 3,
+    transition: 'width .3s'
+  },
+
+  // ── Bottom panels
+  bottomRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+    gap: 20
+  },
+
+  panel: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    padding: '16px 18px'
+  },
+
+  panelHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+
+  panelTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    color: 'var(--text)'
+  },
+
+  linkBtn: {
+    fontSize: 12,
+    color: 'var(--primary)',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0
+  },
+
+  empty: {
+    fontSize: 13,
+    color: 'var(--text-dim)',
+    padding: '12px 0'
+  },
+
+  // ── List
+  listRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '9px 0',
+    borderBottom: '1px solid var(--border)'
+  },
+
+  rowTitle: {
+    fontSize: 13,
+    fontWeight: 500,
+    margin: 0,
+    color: 'var(--text)'
+  },
+
+  rowSub: {
+    fontSize: 11,
+    color: 'var(--text-dim)',
+    margin: '2px 0 0'
+  },
+
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    flexShrink: 0
+  },
+
+  // ── Badges
+  alertBadge: {
+    fontSize: 10,
+    padding: '1px 6px',
+    borderRadius: 10,
+    background: 'var(--danger-bg)',
+    color: 'var(--danger)',
+    fontWeight: 600
+  },
+
+  lowBadge: {
+    fontSize: 11,
+    padding: '2px 8px',
+    borderRadius: 10,
+    background: 'var(--danger-bg)',
+    color: 'var(--danger)',
+    fontWeight: 600,
+    flexShrink: 0
+  },
+
+  badge: {
+    fontSize: 11,
+    padding: '2px 8px',
+    borderRadius: 10,
+    fontWeight: 500,
+    flexShrink: 0,
+    background: 'var(--surface-2)',
+    color: 'var(--text-muted)'
+  },
+};

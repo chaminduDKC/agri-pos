@@ -1,27 +1,4 @@
-// schema.ts — UUID version
-// ─────────────────────────────────────────────────────────────
-// WHY UUID INSTEAD OF AUTOINCREMENT?
-//
-//   This app works offline. Multiple devices can create records
-//   simultaneously without internet. If two devices both create
-//   a client offline, auto-increment would give both id=1 —
-//   a conflict when syncing to the cloud.
-//
-//   UUID (e.g. 'f47ac10b-58cc-4372-a567-0e02b2c3d479') is
-//   statistically guaranteed unique across all devices forever.
-//   Generated in Node.js via: import { randomUUID } from 'crypto'
-//
-//   We store it as TEXT in SQLite since SQLite has no UUID type.
-//
-// ─────────────────────────────────────────────────────────────
-// WHY THIS FILE EXISTS:
-//   All CREATE TABLE statements live here, separated from the
-//   connection logic. This keeps db.ts clean and makes it easy
-//   to read/edit the schema without touching anything else.
-//
-// ORDER MATTERS — tables must be created before tables that
-// reference them via FOREIGN KEY. Layer 1 → 2 → 3 → 4.
-// ─────────────────────────────────────────────────────────────
+
 
 export const SCHEMA_VERSION = 1
 // Bump this number when you change the schema in future.
@@ -59,6 +36,7 @@ CREATE TABLE IF NOT EXISTS clients (
 CREATE TABLE IF NOT EXISTS items (
   id                  TEXT     PRIMARY KEY,
   name                TEXT     NOT NULL,
+  unit_size           TEXT,   -- e.g. '1.5' for 1.5 kg bags, '0.25' for 250ml bottles
   category            TEXT,
   unit                TEXT     NOT NULL,   -- 'meters', 'units', 'kg'
   quantity            REAL     DEFAULT 0,
@@ -74,6 +52,9 @@ CREATE TABLE IF NOT EXISTS items (
 --  LAYER 2 — CORE BUSINESS
 --  Depends on Layer 1 tables
 -- ════════════════════════════════
+
+
+
 
 CREATE TABLE IF NOT EXISTS projects (
   id          TEXT     PRIMARY KEY,
@@ -102,8 +83,6 @@ CREATE TABLE IF NOT EXISTS quotations (
   created_at    TEXT     DEFAULT (datetime('now'))
 );
 
--- WHY A SEPARATE TABLE for quotation lines?
--- A quotation has many items. You never store a list inside one row.
 -- Each item line gets its own row here. This is the header-detail pattern.
 CREATE TABLE IF NOT EXISTS quotation_items (
   id            TEXT     PRIMARY KEY,
@@ -169,16 +148,7 @@ CREATE TABLE IF NOT EXISTS paysheets (
   created_at    TEXT     DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS material_issues (
-  id                TEXT     PRIMARY KEY,
-  project_id        TEXT     NOT NULL REFERENCES projects(id),
-  item_id           TEXT     NOT NULL REFERENCES items(id),
-  issued_by         TEXT     NOT NULL REFERENCES users(id),
-  quantity_issued   REAL     NOT NULL,
-  quantity_returned REAL     DEFAULT 0,  -- unused items returned to stock
-  issue_date        TEXT     DEFAULT (date('now')),
-  notes             TEXT
-);
+
 
 CREATE TABLE IF NOT EXISTS invoices (
   id              TEXT     PRIMARY KEY,
@@ -193,6 +163,76 @@ CREATE TABLE IF NOT EXISTS invoices (
   notes           TEXT,
   created_at      TEXT     DEFAULT (datetime('now'))
 );
+
+
+
+
+CREATE TABLE IF NOT EXISTS sub_projects (
+  id          TEXT     PRIMARY KEY,
+  project_id  TEXT     NOT NULL REFERENCES projects(id),
+  title       TEXT     NOT NULL,
+  location    TEXT     NOT NULL,
+  status      TEXT     DEFAULT 'pending'
+                       CHECK(status IN ('pending','in_progress','completed')),
+  notes       TEXT,
+  created_at  TEXT     DEFAULT (datetime('now'))
+);
+
+
+CREATE TABLE IF NOT EXISTS child_projects (
+  id          TEXT     PRIMARY KEY,
+  parent_id   TEXT     NOT NULL REFERENCES sub_projects(id),
+  project_id  TEXT     NOT NULL REFERENCES projects(id),
+  title       TEXT     NOT NULL,
+  location    TEXT     NOT NULL,
+  status      TEXT     DEFAULT 'pending'
+                       CHECK(status IN ('pending','in_progress','completed')),
+  notes       TEXT,
+  created_at  TEXT     DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS allocations (
+  id                  TEXT     PRIMARY KEY,
+  project_id          TEXT     NOT NULL REFERENCES projects(id),
+  item_id             TEXT     REFERENCES items(id),
+  item_name           TEXT     NOT NULL,
+  item_unit           TEXT     NOT NULL,
+  item_unit_size      TEXT,
+  source              TEXT     NOT NULL
+                               CHECK(source IN ('local','external')),
+  quantity_allocated  REAL     NOT NULL,
+  quantity_assigned   REAL     DEFAULT 0,
+  quantity_used       REAL     DEFAULT 0,
+  quantity_returned   REAL     DEFAULT 0,
+  created_at          TEXT     DEFAULT (datetime('now'))
+);
+
+
+
+CREATE TABLE IF NOT EXISTS sub_allocations (
+  id                        TEXT  PRIMARY KEY,
+  sub_project_id            TEXT  NOT NULL REFERENCES sub_projects(id),
+  allocation_id     TEXT  REFERENCES allocations(id),
+  quantity_allocated  REAL     NOT NULL,
+  quantity_assigned         REAL  NOT NULL,
+  quantity_used             REAL  DEFAULT 0,
+  quantity_returned         REAL  DEFAULT 0,
+  allocated_at              TEXT  DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS child_allocations (
+  id                        TEXT  PRIMARY KEY,
+  parent_id                 TEXT  NOT NULL REFERENCES sub_allocations(id),
+  child_project_id          TEXT  NOT NULL REFERENCES child_projects(id),
+  allocation_id     TEXT  REFERENCES allocations(id),
+  quantity_allocated  REAL     NOT NULL,
+  quantity_used             REAL  DEFAULT 0,
+  quantity_returned         REAL  DEFAULT 0,
+  allocated_at              TEXT  DEFAULT (datetime('now'))
+);
+
+
+
 
 
 -- ════════════════════════════════
@@ -235,9 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_client
 CREATE INDEX IF NOT EXISTS idx_quotations_client
   ON quotations(client_id);
 
--- "Get all materials issued to project X"
-CREATE INDEX IF NOT EXISTS idx_material_project
-  ON material_issues(project_id);
+
 
 -- "Get attendance for worker X"
 CREATE INDEX IF NOT EXISTS idx_attendance_worker

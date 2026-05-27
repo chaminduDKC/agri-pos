@@ -49,7 +49,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     height: '100vh',
     overflow: 'hidden',
-    background: '#f7f8fa',
+    background: '#1a1d23', // softer than pure dark
   },
   main: {
     flex: 1,
@@ -60,8 +60,8 @@ const styles: Record<string, React.CSSProperties> = {
   topbar: {
     height: 56,
     padding: '0 28px',
-    borderBottom: '1px solid #eaecf0',
-    background: '#ffffff',
+    borderBottom: '1px solid #2c3443',
+    background: '#232a36',
     display: 'flex',
     alignItems: 'center',
     flexShrink: 0,
@@ -70,11 +70,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 16,
     fontWeight: 600,
     margin: 0,
-    color: '#111',
+    color: '#e5e7eb',
   },
   content: {
     flex: 1,
     overflow: 'auto',
     padding: '28px',
   },
-}
+};

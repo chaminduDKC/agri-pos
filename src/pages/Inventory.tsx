@@ -1,13 +1,11 @@
 // src/pages/Inventory.tsx
 import { useState } from 'react'
 import { useItems, type Item, type ItemInput } from '../hooks/useItems'
-import TextField from '@mui/material/TextField';
-import Autocomplete from '@mui/material/Autocomplete';
 import ComboBox from '../components/ComboBox';
 
 
 const UNITS = ['units', 'meters', 'kg', 'liters', 'rolls', 'boxes', 'bags', 'pairs']
-const emptyForm: ItemInput = { name: '', category: '', unit: 'units', quantity: 0, low_stock_threshold: 5, barcode: '', supplier: '', unit_price: 0 }
+const emptyForm: ItemInput = { name: '', category: '', unit: 'units', quantity: 0, low_stock_threshold: 5, barcode: '', supplier: '', unit_price: 0, unit_size:"" }
 
 export default function Inventory() {
   const { items, categories, loading, error, search, createItem, updateItem, setQuantity, deleteItem } = useItems()
@@ -21,7 +19,6 @@ export default function Inventory() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [adjustingId, setAdjustingId] = useState<string | null>(null)
   const [newQty, setNewQty]         = useState('')
-  const [category, setCategory]     = useState('')
     const [sku, setSku] = useState<string>('')
   
 
@@ -41,7 +38,7 @@ export default function Inventory() {
   const closeForm = () => { setShowForm(false); setSku(''); setEditingId(null); setForm(emptyForm); setFormError(null) }
 
   const handleSave = async () => {
-    console.log(category);
+   
     
     if (!form.name.trim()) { setFormError('Item name is required'); return }
     if (!form.unit.trim()) { setFormError('Unit is required'); return }
@@ -64,8 +61,8 @@ export default function Inventory() {
     setDeletingId(null)
   }
 
-const handleCreateSku = (cat: string, name: string) => {
-  const raw = `${cat}-${name}`.trim().toUpperCase();
+const handleCreateSku = (cat: string, name: string, unit_size: string | undefined) => {
+  const raw = `${cat}-${name}-${unit_size || ''}`.trim().toUpperCase();
 
   const final = raw
     .replace(/[^A-Z0-9]+/g, '-')  
@@ -84,10 +81,11 @@ const handleCreateSku = (cat: string, name: string) => {
       <input style={s.input} type={type} value={String(form[key] ?? '')}
         onChange={e => {
           setForm(f => ({ ...f, [key]: type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value }));
-          if(key === 'name' || key === 'category'){
+          if(key === 'name' || key === 'category' || key === 'unit_size'){
             const cat = key === 'category' ? e.target.value : form.category ?? '';
             const name = key === 'name' ? e.target.value : form.name;
-            handleCreateSku(cat, name);
+            const unit_size = key === 'unit_size' ? e.target.value : form.unit_size ?? '';
+            handleCreateSku(cat, name, unit_size);
           }
         }}
         {...opts} />
@@ -135,7 +133,7 @@ const handleCreateSku = (cat: string, name: string) => {
           <table style={s.table}>
             <thead>
               <tr>
-                {['Name', 'Category', 'Unit', 'Quantity', 'Low stock at', 'Unit price', 'SKU', ''].map(h => (
+                {['Name', 'Category', 'Unit', 'Quantity', 'Low stock at', 'Unit price', 'Unit size', 'SKU', ''].map(h => (
                   <th key={h} style={s.th}>{h}</th>
                 ))}
               </tr>
@@ -174,8 +172,9 @@ const handleCreateSku = (cat: string, name: string) => {
                       )}
                     </td>
                     <td style={s.td}>{item.low_stock_threshold}</td>
-                    <td style={s.td}>Rs {item.unit_price.toFixed(2)}</td>
-                    <td style={s.td}><code style={{ fontSize:11 }}>{item.barcode ?? <span style={{ color:'#d1d5db' }}>—</span>}</code></td>
+                    <td style={s.td}>Rs <span style={{textAlign:'right'}}>{item.unit_price.toFixed(2)}</span></td>
+                    <td style={s.td}>{item?.unit_size ?? ""}</td>
+                    <td style={s.td}>{item.barcode ?? <span style={{ color:'#d1d5db' }}>—</span>}</td>
                     <td style={{ ...s.td, textAlign:'right' }}>
                       <span style={{ display:'flex', gap:6, justifyContent:'flex-end' }}>
                         <button style={s.btnSm} onClick={() => openEdit(item)}>Edit</button>
@@ -216,7 +215,7 @@ const handleCreateSku = (cat: string, name: string) => {
                   options={categories}
                   onChange={val => {
                     setForm(f => ({ ...f, category: val }))
-                    handleCreateSku(val, form.name);
+                    
                   }}
                   placeholder="e.g. pipes, valves, pumps..."
                 />
@@ -228,6 +227,12 @@ const handleCreateSku = (cat: string, name: string) => {
                 <select style={s.input} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
                   {UNITS.map(u => <option key={u}>{u}</option>)}
                 </select>
+
+                <label style={s.label}>Unit size</label>
+                <input style={s.input} type='text' placeholder="60m..." value={form.unit_size || ''} onChange={e => {
+                  setForm(f => ({ ...f, unit_size: e.target.value }))
+                  handleCreateSku(e.target.value, form.name, form.category);
+                }} />
               </div>
               {field('quantity', 'Initial quantity', 'number')}
             </div>
@@ -240,8 +245,8 @@ const handleCreateSku = (cat: string, name: string) => {
               <div style={{
                 width:'100%', marginTop:32, padding:'6px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box'
               }}>
+                <span style={{ color:'#ffffff', fontStyle:'italic' }}>{sku ? sku : <span style={{ color:'#ffffff', fontStyle:'italic' }}>SKU will be generated here</span>}</span>
                 
-                {sku ? sku : <span style={{ color:'#d1d5db', fontStyle:'italic' }}>SKU will be generated based on category and name</span>}
               </div>
               {field('supplier', 'Supplier')}
             </div>
@@ -257,34 +262,229 @@ const handleCreateSku = (cat: string, name: string) => {
     </div>
   )
 }
-
 const s: Record<string, React.CSSProperties> = {
-  page:        { maxWidth: 1100 },
-  header:      { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 },
-  title:       { fontSize:22, fontWeight:600, margin:0 },
-  sub:         { fontSize:13, color:'#888', marginTop:3 },
-  filterBar:   { display:'flex', flexDirection:'column', gap:8, marginBottom:16 },
-  search:      { padding:'10px 14px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:8, boxSizing:'border-box', background:'#fff' },
-  filters:     { display:'flex', gap:6, flexWrap:'wrap' },
-  filterBtn:   { padding:'5px 12px', fontSize:12, border:'1px solid #e5e7eb', borderRadius:20, background:'#fff', cursor:'pointer', color:'#374151' },
-  filterActive:{ background:'#4f46e5', color:'#fff', borderColor:'#4f46e5' },
-  muted:       { color:'#888', fontSize:14 },
-  err:         { color:'#dc2626', fontSize:13, marginBottom:10 },
-  empty:       { textAlign:'center', padding:'60px 0', color:'#9ca3af' },
-  tableWrap:   { background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' },
-  table:       { width:'100%', borderCollapse:'collapse', fontSize:13 },
-  th:          { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5, borderBottom:'1px solid #e5e7eb', background:'#f9fafb' },
-  td:          { padding:'12px 14px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
-  lowBadge:    { fontSize:10, padding:'1px 6px', borderRadius:10, background:'#fee2e2', color:'#dc2626', fontWeight:600 },
-  btnPrimary:  { padding:'9px 16px', background:'#4f46e5', color:'#fff', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:500 },
-  btnSm:       { padding:'5px 10px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:6, fontSize:12, cursor:'pointer' },
-  btnDanger:   { padding:'5px 10px', background:'#dc2626', color:'#fff', border:'none', borderRadius:6, fontSize:12, cursor:'pointer' },
-  overlay:     { position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 },
-  modal:       { background:'#fff', borderRadius:12, padding:28, width:'100%', maxWidth:540, boxShadow:'0 20px 60px rgba(0,0,0,0.12)', maxHeight:'90vh', overflowY:'auto' },
-  modalTitle:  { fontSize:16, fontWeight:600, margin:'0 0 16px' },
-  modalActions:{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:20 },
-  grid2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
-  closeBtn:    { borderRadius:10, padding:'4px 8px', background:'#f3f4f6', border:'none', cursor:'pointer', color:'#dc2626', fontSize:12 },
-  label:       { display:'block', fontSize:12, fontWeight:500, color:'#374151', marginTop:12, marginBottom:4 },
-  input:       { width:'100%', padding:'8px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box' },
-}
+  page: { margin: '0 auto' },
+
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    margin: 0,
+    color: 'var(--text)'
+  },
+
+  sub: {
+    fontSize: 13,
+    color: 'var(--text-muted)',
+    marginTop: 3
+  },
+
+  filterBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    marginBottom: 16
+  },
+
+  search: {
+    padding: '10px 14px',
+    fontSize: 14,
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    boxSizing: 'border-box',
+    background: 'var(--surface)',
+    color: 'var(--text)',
+    outline: 'none'
+  },
+
+  filters: {
+    display: 'flex',
+    gap: 6,
+    flexWrap: 'wrap'
+  },
+
+  filterBtn: {
+    padding: '5px 12px',
+    fontSize: 12,
+    border: '1px solid var(--border)',
+    borderRadius: 20,
+    background: 'var(--surface)',
+    cursor: 'pointer',
+    color: 'var(--text-muted)'
+  },
+
+  filterActive: {
+    background: 'var(--primary)',
+    color: '#fff',
+    borderColor: 'var(--primary)'
+  },
+
+  muted: {
+    color: 'var(--text-dim)',
+    fontSize: 14
+  },
+
+  err: {
+    color: 'var(--danger)',
+    fontSize: 13,
+    marginBottom: 10
+  },
+
+  empty: {
+    textAlign: 'center',
+    padding: '60px 0',
+    color: 'var(--text-dim)'
+  },
+
+  tableWrap: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    overflow: 'hidden'
+  },
+
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 13
+  },
+
+  th: {
+    padding: '10px 14px',
+    textAlign: 'left',
+    fontSize: 12,
+    fontWeight: 600,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    borderBottom: '1px solid var(--border)',
+    background: 'var(--surface-2)'
+  },
+
+  td: {
+    padding: '12px 14px',
+    borderBottom: '1px solid var(--border)',
+    fontSize: 14,
+    verticalAlign: 'middle',
+    color: 'var(--text)'
+  },
+
+  lowBadge: {
+    fontSize: 12,
+    padding: '1px 6px',
+    borderRadius: 10,
+    background: 'var(--danger-bg)',
+    color: 'var(--danger)',
+    fontWeight: 600
+  },
+
+  btnPrimary: {
+    padding: '9px 16px',
+    background: 'var(--primary)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 13,
+    cursor: 'pointer',
+    fontWeight: 500
+  },
+
+  btnSm: {
+    padding: '5px 10px',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    cursor: 'pointer',
+    color: 'var(--text)'
+  },
+
+  btnDanger: {
+    padding: '5px 10px',
+    background: 'var(--danger)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 12,
+    cursor: 'pointer'
+  },
+
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100
+  },
+
+  modal: {
+    background: 'var(--surface)',
+    borderRadius: 12,
+    padding: 28,
+    width: '100%',
+    maxWidth: 540,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    border: '1px solid var(--border)'
+  },
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: '0 0 16px',
+    color: 'var(--text)'
+  },
+
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 20
+  },
+
+  grid2: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12
+  },
+
+  closeBtn: {
+    borderRadius: 10,
+    padding: '4px 8px',
+    background: 'var(--surface-3)',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--danger)',
+    fontSize: 12
+  },
+
+  label: {
+    display: 'block',
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'var(--text-muted)',
+    marginTop: 12,
+    marginBottom: 4
+  },
+
+  input: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 14,
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    boxSizing: 'border-box',
+    background: 'var(--bg)',
+    color: 'var(--text)',
+    outline: 'none'
+  },
+};

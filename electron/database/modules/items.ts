@@ -24,7 +24,8 @@ export interface ItemInput {
   low_stock_threshold?: number
   barcode?: string
   supplier?: string
-  unit_price?: number
+  unit_price?: number,
+  unit_size?:string
 }
 
 export class ItemsRepository {
@@ -102,11 +103,12 @@ export class ItemsRepository {
   }
 
   // ── CREATE ────────────────────────────────────────────────
-  create(input: ItemInput): Item {
+  create(input: ItemInput) {
+    console.log(input)
     const id = randomUUID()
     this.db.prepare(`
-      INSERT INTO items (id, name, category, unit, quantity, low_stock_threshold, barcode, supplier, unit_price)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO items (id, name, category, unit, quantity, low_stock_threshold, barcode, supplier, unit_price, unit_size)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.name,
@@ -117,6 +119,7 @@ export class ItemsRepository {
       input.barcode         ?? null,
       input.supplier        ?? null,
       input.unit_price      ?? 0,
+      input.unit_size       ?? null,
     )
     return this.getById(id)!
   }
@@ -132,6 +135,7 @@ export class ItemsRepository {
         barcode             = ?,
         supplier            = ?,
         unit_price          = ?,
+        unit_size           = ?,
         updated_at          = datetime('now')
       WHERE id = ?
     `).run(
@@ -142,6 +146,7 @@ export class ItemsRepository {
       input.barcode         ?? null,
       input.supplier        ?? null,
       input.unit_price      ?? 0,
+      input.unit_size       ?? null,
       id,
     )
     return this.getById(id)

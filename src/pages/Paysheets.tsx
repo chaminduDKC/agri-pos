@@ -413,28 +413,172 @@ export default function Paysheets() {
     </div>
   )
 }
-
 const s: Record<string, React.CSSProperties> = {
-  page:       { maxWidth: 1100 },
-  header:     { marginBottom: 16 },
-  title:      { fontSize:22, fontWeight:600, margin:0 },
-  tabs:       { display:'flex', gap:4, marginBottom:20, borderBottom:'1px solid #e5e7eb' },
-  tab:        { padding:'8px 16px', fontSize:13, border:'none', background:'transparent', cursor:'pointer', color:'#6b7280', borderBottom:'2px solid transparent', marginBottom:-1 },
-  tabActive:  { color:'#4f46e5', borderBottomColor:'#4f46e5', fontWeight:500 },
-  panel:      { background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, padding:20, marginBottom:20 },
-  panelTitle: { fontSize:13, fontWeight:600, color:'#374151', margin:'0 0 12px' },
-  summary:    { marginTop:16, padding:14, background:'#f9fafb', borderRadius:8, display:'flex', flexDirection:'column', gap:6 },
-  summaryRow: { display:'flex', justifyContent:'space-between', fontSize:13, color:'#374151' },
-  grid3:      { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 },
-  tableWrap:  { background:'#fff', border:'1px solid #e5e7eb', borderRadius:10, overflow:'hidden' },
-  table:      { width:'100%', borderCollapse:'collapse', fontSize:13 },
-  th:         { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.5, borderBottom:'1px solid #e5e7eb', background:'#f9fafb' },
-  td:         { padding:'11px 14px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
-  muted:      { color:'#9ca3af', fontSize:14, padding:'20px 0' },
-  err:        { color:'#dc2626', fontSize:13, marginTop:8 },
-  label:      { display:'block', fontSize:12, fontWeight:500, color:'#374151', marginBottom:4 },
-  input:      { width:'100%', padding:'8px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box' },
-  btnPrimary: { padding:'9px 16px', background:'#4f46e5', color:'#fff', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:500 },
-  btnSecondary:{ padding:'9px 16px', background:'#fff', color:'#4f46e5', border:'1px solid #4f46e5', borderRadius:8, fontSize:13, cursor:'pointer' },
-  btnSm:      { padding:'5px 10px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:6, fontSize:12, cursor:'pointer' },
-}
+  page: { margin: '0 auto' },
+
+  header: { marginBottom: 16 },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    margin: 0,
+    color: '#e5e7eb'
+  },
+
+  tabs: {
+    display: 'flex',
+    gap: 4,
+    marginBottom: 20,
+    borderBottom: '1px solid #2c3443'
+  },
+
+  tab: {
+    padding: '8px 16px',
+    fontSize: 13,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    color: '#9ca3af',
+    borderBottom: '2px solid transparent',
+    marginBottom: -1
+  },
+
+  tabActive: {
+    color: '#818cf8',
+    borderBottomColor: '#818cf8',
+    fontWeight: 500
+  },
+
+  panel: {
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 10,
+    padding: 20,
+    marginBottom: 20
+  },
+
+  panelTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#e5e7eb',
+    margin: '0 0 12px'
+  },
+
+  summary: {
+    marginTop: 16,
+    padding: 14,
+    background: '#1e2430',
+    borderRadius: 8,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6
+  },
+
+  summaryRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: 13,
+    color: '#9ca3af'
+  },
+
+  grid3: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: 12
+  },
+
+  tableWrap: {
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 10,
+    overflow: 'hidden'
+  },
+
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 13
+  },
+
+  th: {
+    padding: '10px 14px',
+    textAlign: 'left',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    borderBottom: '1px solid #2c3443',
+    background: '#1e2430'
+  },
+
+  td: {
+    padding: '11px 14px',
+    borderBottom: '1px solid #2c3443',
+    verticalAlign: 'middle',
+    color: '#e5e7eb'
+  },
+
+  muted: {
+    color: '#6b7280',
+    fontSize: 14,
+    padding: '20px 0'
+  },
+
+  err: {
+    color: '#f87171',
+    fontSize: 13,
+    marginTop: 8
+  },
+
+  label: {
+    display: 'block',
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#9ca3af',
+    marginBottom: 4
+  },
+
+  input: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 14,
+    border: '1px solid #2c3443',
+    borderRadius: 6,
+    boxSizing: 'border-box',
+    background: '#1e2430',
+    color: '#e5e7eb',
+    outline: 'none'
+  },
+
+  btnPrimary: {
+    padding: '9px 16px',
+    background: '#6366f1',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    fontSize: 13,
+    cursor: 'pointer',
+    fontWeight: 500
+  },
+
+  btnSecondary: {
+    padding: '9px 16px',
+    background: 'transparent',
+    color: '#818cf8',
+    border: '1px solid #818cf8',
+    borderRadius: 8,
+    fontSize: 13,
+    cursor: 'pointer'
+  },
+
+  btnSm: {
+    padding: '5px 10px',
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 6,
+    fontSize: 12,
+    cursor: 'pointer',
+    color: '#e5e7eb'
+  }
+};

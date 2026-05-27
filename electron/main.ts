@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { initializeDb, closeDb, getDb } from './database/db'
+import { registerAuthHandlers } from './auth/authHandlers'
 import { ClientsRepository }    from './database/modules/clients'
 import { ItemsRepository }      from './database/modules/items'
 import { ProjectsRepository }   from './database/modules/projects'
@@ -10,11 +10,8 @@ import { QuotationsRepository } from './database/modules/quotations'
 import { WorkersRepository, AttendanceRepository } from './database/modules/workers'
 import { PaysheetsRepository }  from './database/modules/paysheets'
 import { InvoicesRepository }   from './database/modules/invoices'
-import { SyncLogger }           from './sync/syncLogger'
-import { SyncEngine }           from './sync/syncEngine'
-import { NetMonitor }           from './sync/netMonitor'
+import { AllocationsRepository, ChildProjectsRepository, SubProjectsRepository } from './database/modules/allocations'
 
-const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 process.env.APP_ROOT = path.join(__dirname, '..')
@@ -26,20 +23,17 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   : RENDERER_DIST
 
 let win: BrowserWindow | null
-let syncEngine: SyncEngine | null = null
-let netMonitor: NetMonitor | null = null
 
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
-    width: 1280, height: 800,minWidth:1000,
+    width: 1280, height: 800, minWidth: 1000,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   })
-  //win.webContents.openDevTools()
   if (VITE_DEV_SERVER_URL) { win.loadURL(VITE_DEV_SERVER_URL) }
   else { win.loadFile(path.join(RENDERER_DIST, 'index.html')) }
 }
@@ -47,55 +41,29 @@ function createWindow() {
 app.whenReady().then(() => {
   try { initializeDb() } catch (err) { console.error('[DB] Failed:', err); app.quit(); return }
 
-  // ── Initialise sync ─────────────────────────────────────
-  const db         = getDb()
-  const syncLogger = new SyncLogger(db)
-
-  syncEngine = new SyncEngine(syncLogger, {
-    // Replace with your actual API URL when you have a cloud backend
-    apiBaseUrl: process.env.CLOUD_API_URL ?? 'https://your-api.example.com',
-    authToken:  null,  // Set this after user logs in
-    batchSize:  50,
-  })
-
-  // Push sync status updates to the renderer window
-  syncEngine.onStatus((status, pendingCount) => {
-    win?.webContents.send('sync:status', { status, pendingCount })
-  })
-
-  // Start network monitor — triggers sync when internet returns
-  netMonitor = new NetMonitor({ intervalMs: 15_000 })
-  netMonitor.start({
-    onReconnect:  () => syncEngine?.sync(),
-    onDisconnect: () => win?.webContents.send('sync:status', { status: 'offline', pendingCount: syncLogger.getPendingCount() }),
-  })
-
-  // Also sync on a timer in case reconnect is missed
-  setInterval(() => {
-    if (netMonitor?.getIsOnline()) syncEngine?.sync()
-  }, 60_000)
-
-  registerIpcHandlers(syncLogger)
+  registerAuthHandlers(ipcMain, () => win)
+  registerIpcHandlers()
   createWindow()
+
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
-app.on('before-quit', () => {
-  netMonitor?.stop()
-  closeDb()
-})
+app.on('before-quit', () => closeDb())
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 
-function registerIpcHandlers(syncLogger: SyncLogger) {
+function registerIpcHandlers() {
   const db = getDb()
-  const clients    = new ClientsRepository(db)
-  const items      = new ItemsRepository(db)
-  const projects   = new ProjectsRepository(db)
-  const quotations = new QuotationsRepository(db)
-  const workers    = new WorkersRepository(db)
-  const attendance = new AttendanceRepository(db)
-  const paysheets  = new PaysheetsRepository(db)
-  const invoices   = new InvoicesRepository(db)
+  const clients     = new ClientsRepository(db)
+  const items       = new ItemsRepository(db)
+  const projects    = new ProjectsRepository(db)
+  const quotations  = new QuotationsRepository(db)
+  const workers     = new WorkersRepository(db)
+  const attendance  = new AttendanceRepository(db)
+  const paysheets   = new PaysheetsRepository(db)
+  const invoices    = new InvoicesRepository(db)
+  const allocations = new AllocationsRepository(db)
+  const subProjects = new SubProjectsRepository(db)
+  const childProjects = new ChildProjectsRepository(db)
 
   const getAdminId = () => (db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string }).id
 
@@ -106,42 +74,20 @@ function registerIpcHandlers(syncLogger: SyncLogger) {
     catch (err: any) { return { success: false, error: err.message } }
   })
 
-  // ── Sync ──────────────────────────────────────────────────
-  ipcMain.handle('sync:getStatus', () => ({
-    status:       syncEngine?.getStatus() ?? 'idle',
-    pendingCount: syncLogger.getPendingCount(),
-    isOnline:     netMonitor?.getIsOnline() ?? true,
-  }))
-
-  ipcMain.handle('sync:now', async () => {
-    if (!syncEngine) return { success: false, error: 'Sync not initialised' }
-    console.log("Try to sync")
-    const result = await syncEngine.sync()
-    console.log(result)
-
-    return { success: true, data: result }
-  })
-
   // ── Clients ───────────────────────────────────────────────
   ipcMain.handle('db:clients:getAll',  () => wrap(() => clients.getAllWithStats()))
   ipcMain.handle('db:clients:getById', (_e, id)        => wrap(() => clients.getById(id)))
   ipcMain.handle('db:clients:search',  (_e, q)         => wrap(() => clients.search(q)))
   ipcMain.handle('db:clients:create',  (_e, input)     => wrap(() => {
     if (!input?.name?.trim()) throw new Error('Client name is required')
-    return syncLogger.loggedWrite('clients', input.id ?? '', 'INSERT',
-      () => clients.create(input),
-      input
-    )
+    return clients.create(input)
   }))
   ipcMain.handle('db:clients:update',  (_e, id, input) => wrap(() => {
     if (!input?.name?.trim()) throw new Error('Client name is required')
-    return syncLogger.loggedWrite('clients', id, 'UPDATE',
-      () => clients.update(id, input),
-      { id, ...input }
-    )
+    return clients.update(id, input)
   }))
   ipcMain.handle('db:clients:delete',  (_e, id) =>
-    wrapDelete(() => syncLogger.loggedWrite('clients', id, 'DELETE', () => clients.delete(id)), 'client has projects linked to them'))
+    wrapDelete(() => clients.delete(id), 'client has projects linked to them'))
 
   // ── Items ─────────────────────────────────────────────────
   ipcMain.handle('db:items:getAll',        () => wrap(() => items.getAll()))
@@ -156,18 +102,16 @@ function registerIpcHandlers(syncLogger: SyncLogger) {
   ipcMain.handle('db:items:create',      (_e, input)     => wrap(() => {
     if (!input?.name?.trim()) throw new Error('Item name is required')
     if (!input?.unit?.trim()) throw new Error('Unit is required')
-    return syncLogger.loggedWrite('items', '', 'INSERT', () => items.create(input), input)
+    return items.create(input)
   }))
   ipcMain.handle('db:items:update',      (_e, id, input) => wrap(() => {
     if (!input?.name?.trim()) throw new Error('Item name is required')
     if (!input?.unit?.trim()) throw new Error('Unit is required')
-    return syncLogger.loggedWrite('items', id, 'UPDATE', () => items.update(id, input), { id, ...input })
+    return items.update(id, input)
   }))
-  ipcMain.handle('db:items:setQuantity', (_e, id, qty)   => wrap(() =>
-    syncLogger.loggedWrite('items', id, 'UPDATE', () => items.setQuantity(id, qty), { id, quantity: qty })
-  ))
+  ipcMain.handle('db:items:setQuantity', (_e, id, qty)   => wrap(() => items.setQuantity(id, qty)))
   ipcMain.handle('db:items:delete',      (_e, id) =>
-    wrapDelete(() => syncLogger.loggedWrite('items', id, 'DELETE', () => items.delete(id)), 'item has been used in projects'))
+    wrapDelete(() => items.delete(id), 'item has been used in projects'))
 
   // ── Projects ──────────────────────────────────────────────
   ipcMain.handle('db:projects:getAll',          () => wrap(() => projects.getAll()))
@@ -178,19 +122,14 @@ function registerIpcHandlers(syncLogger: SyncLogger) {
   ipcMain.handle('db:projects:create',          (_e, input)    => wrap(() => {
     if (!input?.title?.trim())     throw new Error('Project title is required')
     if (!input?.client_id?.trim()) throw new Error('Client is required')
-    return syncLogger.loggedWrite('projects', '', 'INSERT',
-      () => projects.create(input, getAdminId()), input)
+    return projects.create(input, getAdminId())
   }))
-  ipcMain.handle('db:projects:update',       (_e, id, input)  => wrap(() =>
-    syncLogger.loggedWrite('projects', id, 'UPDATE', () => projects.update(id, input), { id, ...input })
-  ))
-  ipcMain.handle('db:projects:updateStatus', (_e, id, status) => wrap(() =>
-    syncLogger.loggedWrite('projects', id, 'UPDATE', () => projects.updateStatus(id, status), { id, status })
-  ))
-  ipcMain.handle('db:projects:cascadeDelete', (_e, id) => wrap(() => projects.cascadeDelete(id)))
-
-  ipcMain.handle('db:projects:delete',       (_e, id) =>
-    wrapDelete(() => syncLogger.loggedWrite('projects', id, 'DELETE', () => projects.delete(id)), 'project has materials or attendance linked to it'))
+  ipcMain.handle('db:projects:update',         (_e, id, input)  => wrap(() => projects.update(id, input)))
+  ipcMain.handle('db:projects:updateStatus',   (_e, id, status) => wrap(() => projects.updateStatus(id, status)))
+  ipcMain.handle('db:projects:cascadeDelete',  (_e, id)         => wrap(() => projects.cascadeDelete(id)))
+  ipcMain.handle('db:projects:fullDelete',     (_e, id)         => wrap(() => projects.fullDelete(id)))
+  ipcMain.handle('db:projects:delete',         (_e, id) =>
+    wrapDelete(() => projects.delete(id), 'project has materials or attendance linked to it'))
 
   // ── Quotations ────────────────────────────────────────────
   ipcMain.handle('db:quotations:getAll',           () => wrap(() => quotations.getAll()))
@@ -199,50 +138,39 @@ function registerIpcHandlers(syncLogger: SyncLogger) {
     if (!q) throw new Error('Quotation not found')
     return q
   }))
-  ipcMain.handle('db:quotations:search',           (_e, q)        => wrap(() => quotations.search(q)))
-  ipcMain.handle('db:quotations:create',           (_e, input)    => wrap(() => {
+  ipcMain.handle('db:quotations:search',           (_e, q)         => wrap(() => quotations.search(q)))
+  ipcMain.handle('db:quotations:create',           (_e, input)     => wrap(() => {
     if (!input?.client_id?.trim()) throw new Error('Client is required')
     if (!input?.items?.length)     throw new Error('At least one line item is required')
-    return syncLogger.loggedWrite('quotations', '', 'INSERT',
-      () => quotations.create(input, getAdminId()), input)
+    return quotations.create(input, getAdminId())
   }))
   ipcMain.handle('db:quotations:update',           (_e, id, input) => wrap(() => {
     if (!input?.client_id?.trim()) throw new Error('Client is required')
     if (!input?.items?.length)     throw new Error('At least one line item is required')
-    return syncLogger.loggedWrite('quotations', id, 'UPDATE',
-      () => quotations.update(id, input), { id, ...input })
+    return quotations.update(id, input)
   }))
-  ipcMain.handle('db:quotations:updateStatus',     (_e, id, status) => wrap(() =>
-    syncLogger.loggedWrite('quotations', id, 'UPDATE',
-      () => quotations.updateStatus(id, status), { id, status })
-  ))
+  ipcMain.handle('db:quotations:updateStatus',     (_e, id, status) => wrap(() => quotations.updateStatus(id, status)))
   ipcMain.handle('db:quotations:delete',           (_e, id) =>
-    wrapDelete(() => syncLogger.loggedWrite('quotations', id, 'DELETE', () => quotations.delete(id)), 'quotation is linked to an invoice'))
+    wrapDelete(() => quotations.delete(id), 'quotation is linked to an invoice'))
 
   // ── Workers ───────────────────────────────────────────────
   ipcMain.handle('db:workers:getAll',  () => wrap(() => workers.getAll()))
-  ipcMain.handle('db:workers:getById', (_e, id) => wrap(() => workers.getById(id)))
-  ipcMain.handle('db:workers:create',  (_e, input) => wrap(() => {
+  ipcMain.handle('db:workers:getById', (_e, id)        => wrap(() => workers.getById(id)))
+  ipcMain.handle('db:workers:create',  (_e, input)     => wrap(() => {
     if (!input?.name?.trim())      throw new Error('Worker name is required')
     if (input?.daily_rate == null) throw new Error('Daily rate is required')
-    return syncLogger.loggedWrite('workers', '', 'INSERT', () => workers.create(input), input)
+    return workers.create(input)
   }))
-  ipcMain.handle('db:workers:update',  (_e, id, input) => wrap(() =>
-    syncLogger.loggedWrite('workers', id, 'UPDATE', () => workers.update(id, input), { id, ...input })
-  ))
+  ipcMain.handle('db:workers:update',  (_e, id, input) => wrap(() => workers.update(id, input)))
   ipcMain.handle('db:workers:delete',  (_e, id) =>
-    wrapDelete(() => syncLogger.loggedWrite('workers', id, 'DELETE', () => workers.delete(id)), 'worker has attendance or paysheets linked'))
+    wrapDelete(() => workers.delete(id), 'worker has attendance or paysheets linked'))
 
   // ── Attendance ────────────────────────────────────────────
-  ipcMain.handle('db:attendance:getByProject',         (_e, projectId)           => wrap(() => attendance.getByProject(projectId)))
-  ipcMain.handle('db:attendance:getByWorkerAndPeriod', (_e, workerId, from, to)  => wrap(() => attendance.getByWorkerAndPeriod(workerId, from, to)))
-  ipcMain.handle('db:attendance:getSummary',           (_e, workerId, from, to)  => wrap(() => attendance.getSummary(workerId, from, to)))
-  ipcMain.handle('db:attendance:mark',                 (_e, input)               => wrap(() =>
-    syncLogger.loggedWrite('attendance', input.worker_id, 'INSERT', () => attendance.mark(input), input)
-  ))
-  ipcMain.handle('db:attendance:delete',               (_e, id) => wrap(() =>
-    syncLogger.loggedWrite('attendance', id, 'DELETE', () => attendance.delete(id))
-  ))
+  ipcMain.handle('db:attendance:getByProject',         (_e, projectId)          => wrap(() => attendance.getByProject(projectId)))
+  ipcMain.handle('db:attendance:getByWorkerAndPeriod', (_e, wId, from, to)      => wrap(() => attendance.getByWorkerAndPeriod(wId, from, to)))
+  ipcMain.handle('db:attendance:getSummary',           (_e, wId, from, to)      => wrap(() => attendance.getSummary(wId, from, to)))
+  ipcMain.handle('db:attendance:mark',                 (_e, input)              => wrap(() => attendance.mark(input)))
+  ipcMain.handle('db:attendance:delete',               (_e, id)                 => wrap(() => attendance.delete(id)))
 
   // ── Paysheets ─────────────────────────────────────────────
   ipcMain.handle('db:paysheets:getAll',       () => wrap(() => paysheets.getAll()))
@@ -251,15 +179,10 @@ function registerIpcHandlers(syncLogger: SyncLogger) {
     if (!input?.worker_id)    throw new Error('Worker is required')
     if (!input?.period_start) throw new Error('Period start is required')
     if (!input?.period_end)   throw new Error('Period end is required')
-    return syncLogger.loggedWrite('paysheets', '', 'INSERT', () => paysheets.create(input), input)
+    return paysheets.create(input)
   }))
-  ipcMain.handle('db:paysheets:updateStatus', (_e, id, status) => wrap(() =>
-    syncLogger.loggedWrite('paysheets', id, 'UPDATE',
-      () => paysheets.updateStatus(id, status, getAdminId()), { id, status })
-  ))
-  ipcMain.handle('db:paysheets:delete',       (_e, id) => wrap(() =>
-    syncLogger.loggedWrite('paysheets', id, 'DELETE', () => paysheets.delete(id))
-  ))
+  ipcMain.handle('db:paysheets:updateStatus', (_e, id, status) => wrap(() => paysheets.updateStatus(id, status, getAdminId())))
+  ipcMain.handle('db:paysheets:delete',       (_e, id)         => wrap(() => paysheets.delete(id)))
 
   // ── Invoices ──────────────────────────────────────────────
   ipcMain.handle('db:invoices:getAll',                () => wrap(() => invoices.getAll()))
@@ -269,18 +192,49 @@ function registerIpcHandlers(syncLogger: SyncLogger) {
     if (!input?.project_id) throw new Error('Project is required')
     if (!input?.client_id)  throw new Error('Client is required')
     if (!input?.amount_due) throw new Error('Amount due is required')
-    return syncLogger.loggedWrite('invoices', '', 'INSERT', () => invoices.create(input), input)
+    return invoices.create(input)
   }))
-  ipcMain.handle('db:invoices:update',                (_e, id, input) => wrap(() =>
-    syncLogger.loggedWrite('invoices', id, 'UPDATE', () => invoices.update(id, input), { id, ...input })
-  ))
+  ipcMain.handle('db:invoices:update',                (_e, id, input) => wrap(() => invoices.update(id, input)))
   ipcMain.handle('db:invoices:recordPayment',         (_e, id, amount) => wrap(() => {
     if (!amount || amount <= 0) throw new Error('Payment amount must be greater than 0')
-    return syncLogger.loggedWrite('invoices', id, 'UPDATE',
-      () => invoices.recordPayment(id, amount), { id, payment: amount })
+    return invoices.recordPayment(id, amount)
   }))
   ipcMain.handle('db:invoices:delete',                (_e, id) =>
-    wrapDelete(() => syncLogger.loggedWrite('invoices', id, 'DELETE', () => invoices.delete(id)), 'invoice cannot be deleted'))
+    wrapDelete(() => invoices.delete(id), 'invoice cannot be deleted'))
+
+  // ── Sub-projects ──────────────────────────────────────────
+  ipcMain.handle('db:subProjects:getByProject', (_e, projectId) => wrap(() => subProjects.getByProject(projectId)))
+  ipcMain.handle('db:subProjects:create',       (_e, input)     => wrap(() => subProjects.create(input)))
+  ipcMain.handle('db:subProjects:createChild',  (_e, input)     => wrap(() => subProjects.createChild(input)))
+  ipcMain.handle('db:subProjects:updateStatus', (_e, id, status)=> wrap(() => subProjects.updateStatus(id, status)))
+  ipcMain.handle('db:subProjects:update',       (_e, id, input) => wrap(() => subProjects.update(id, input)))
+  ipcMain.handle('db:subProjects:delete',       (_e, id)        => wrap(() => subProjects.delete(id)))
+
+  // ── Allocations ───────────────────────────────────────────
+  ipcMain.handle('db:allocations:getByProject',                 (_e, projectId)          => wrap(() => allocations.getByProject(projectId)))
+  ipcMain.handle('db:allocations:getChildAllocationsByChildProject',                 (_e, childProjectId)          => wrap(() => allocations.getChildAllocationsByChildProject(childProjectId)))
+  ipcMain.handle('db:allocations:getById',                 (_e, id)          => wrap(() => allocations.getById(id)))
+  ipcMain.handle('db:allocations:getChildAllocationById',                 (_e, id)          => wrap(() => allocations.getChildAllocationById(id)))
+  ipcMain.handle('db:allocations:delete',                 (_e, id)          => wrap(() => allocations.delete(id)))
+  ipcMain.handle('db:allocations:deleteSubAllocation',                 (_e, id)          => wrap(() => allocations.deleteSubAllocation(id)))
+  ipcMain.handle('db:allocations:deleteChildAllocation',                 (_e, id)          => wrap(() => allocations.deleteChildAllocation(id)))
+  ipcMain.handle('db:allocations:create',                     (_e, input)              => wrap(() => allocations.create(input)))
+  ipcMain.handle('db:allocations:markChildUsed',                     (_e, input)              => wrap(() => allocations.markChildUsed(input)))
+  ipcMain.handle('db:allocations:markUsed',                     (_e, id, qty)              => wrap(() => allocations.markUsed(id, qty)))
+  ipcMain.handle('db:allocations:createSubAllocation',                     (_e, input)              => wrap(() => allocations.createSubAllocation(input)))
+  ipcMain.handle('db:allocations:createChildAllocation',                     (_e, input)              => wrap(() => allocations.createChildAllocation(input)))
+  ipcMain.handle('db:allocations:getSubAllocationById',                     (_e, id)              => wrap(() => allocations.getSubAllocationById(id)))
+  ipcMain.handle('db:allocations:returnToInventory',            (_e, id, qty)            => wrap(() => allocations.returnToInventory(id, qty)))
+  ipcMain.handle('db:allocations:returnSubToMain',            (_e, id, qty)            => wrap(() => allocations.returnSubToMain(id, qty)))
+  ipcMain.handle('db:allocations:returnChildToSub',            (_e, id, qty)            => wrap(() => allocations.returnChildToSub(id, qty)))
+  ipcMain.handle('db:allocations:getSubAllocationsBySubProject',(_e, subProjectId)       => wrap(() => allocations.getSubAllocationsBySubProject(subProjectId)))
+
+
+
+// -child projects
+  ipcMain.handle('db:childProjects:getBySubProject', (_e, subId)=> wrap(()=> childProjects.getBySubProject(subId)))
+  ipcMain.handle('db:childProjects:create', (_e, input)=> wrap(()=> childProjects.create(input)))
+  ipcMain.handle('db:childProjects:delete', (_e, childId)=> wrap(()=> childProjects.delete(childId)))
 }
 
 // ── Helpers ───────────────────────────────────────────────────

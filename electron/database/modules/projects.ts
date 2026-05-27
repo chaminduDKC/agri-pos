@@ -1,6 +1,7 @@
 // electron/database/modules/projects.ts
 
 import Database from 'better-sqlite3'
+import { log } from 'console'
 import { randomUUID } from 'crypto'
 
 export interface Project {
@@ -148,16 +149,37 @@ export class ProjectsRepository {
     this.db.prepare(`UPDATE projects SET status = ? WHERE id = ?`).run(status, id)
     return this.getById(id)
   }
+  fullDelete(id:string):{success:boolean, error?:string}{
+    console.log(id);
+    
+ return { success: true }
+  }
 cascadeDelete(id: string): { success: boolean; error?: string } { 
-    const hasMaterials = this.db.prepare(`SELECT 1 FROM materials WHERE project_id = ? LIMIT 1`).get(id)
+  console.log('Attempting cascade delete for project ID:', id)
+    const hasMaterials = this.db.prepare(`SELECT * FROM material_issues WHERE project_id = ? LIMIT 1`).get(id)
     const hasAttendance = this.db.prepare(`SELECT 1 FROM attendance WHERE project_id = ? LIMIT 1`).get(id)
+    console.log('Has linked materials?', !!hasMaterials)
+    console.log('Has linked attendance records?', !!hasAttendance)
 
-    if (hasMaterials || hasAttendance) {
-      return { success: false, error: 'Project has linked materials or attendance records' }
-    }
+    const run = this.db.transaction(() => {
+    this.db.prepare(`DELETE FROM sub_project_allocations
+      WHERE sub_project_id IN (SELECT id FROM sub_projects WHERE project_id = ?)`).run(id)
+    this.db.prepare(`DELETE FROM sub_projects        WHERE project_id = ?`).run(id)
+    this.db.prepare(`DELETE FROM project_allocations WHERE project_id = ?`).run(id)
+    this.db.prepare(`DELETE FROM material_issues     WHERE project_id = ?`).run(id)
+    this.db.prepare(`DELETE FROM attendance          WHERE project_id = ?`).run(id)
+    this.db.prepare(`DELETE FROM projects            WHERE id = ?`).run(id)
+  })
+  run()
+  return { success: true }
 
-    const result = this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(id)
-    return { success: result.changes > 0 }
+    // if (hasMaterials || hasAttendance) {
+    //   console.log('Cannot delete project with linked materials or attendance records')
+    //   return { success: false, error: 'Project has linked materials or attendance records' }
+    // }
+
+    // const result = this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(id)
+    // return { success: result.changes > 0 }
   }
 
   // ── DELETE ────────────────────────────────────────────────

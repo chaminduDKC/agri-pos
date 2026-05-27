@@ -18,12 +18,25 @@ export interface Project {
 export interface ProjectInput {
   client_id: string
   title: string
+  no_of_sub_projects?: number
   location?: string
   status?: string
   start_date?: string
   end_date?: string
   notes?: string
 }
+
+export interface ItemInput {
+  name: string
+  category?: string
+  unit: string
+  quantity?: number
+  low_stock_threshold?: number
+  barcode?: string
+  supplier?: string
+  unit_price?: number
+}
+
 
 export function useProjects() {
   const [projects, setProjects]     = useState<Project[]>([])

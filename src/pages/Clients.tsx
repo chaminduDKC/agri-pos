@@ -76,7 +76,8 @@ export default function Clients() {
               <div style={s.avatar}>{client.name.charAt(0).toUpperCase()}</div>
               <div>
                 <p style={s.name}>{client.name}</p>
-                <p style={s.meta}>{[client.phone, client.email].filter(Boolean).join(' · ') || 'No contact info'}</p>
+                <p style={s.meta}>{[client.phone].filter(Boolean).join(' · ') || 'No contact info'}</p>
+                <p style={s.meta}>{client.email || 'No email provided'}</p>
                 {client.address && <p style={s.meta}>{client.address}</p>}
               </div>
             </div>
@@ -109,7 +110,7 @@ export default function Clients() {
       </div>
 
       {showForm && (
-        <div style={s.overlay} onClick={closeForm}>
+        <div style={s.overlay}>
           <div style={s.modal} onClick={e => e.stopPropagation()}>
             <h3 style={s.modalTitle}>{editingId ? 'Edit Client' : 'New Client'}</h3>
             {formError && <p style={s.err}>{formError}</p>}
@@ -131,33 +132,226 @@ export default function Clients() {
     </div>
   )
 }
-
 const s: Record<string, React.CSSProperties> = {
-  page:        { maxWidth: 860 },
-  header:      { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 },
-  title:       { fontSize:22, fontWeight:600, margin:0 },
-  sub:         { fontSize:13, color:'#888', marginTop:3 },
-  search:      { width:'100%', padding:'10px 14px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:8, marginBottom:16, boxSizing:'border-box', background:'#fff' },
-  muted:       { color:'#888', fontSize:14 },
-  err:         { color:'#dc2626', fontSize:13, marginBottom:10 },
-  empty:       { textAlign:'center', padding:'60px 0', color:'#9ca3af' },
-  list:        { display:'flex', flexDirection:'column', gap:8 },
-  card:        { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 16px', border:'1px solid #e5e7eb', borderRadius:10, background:'#fff', flexWrap:'wrap', gap:8 },
-  cardLeft:    { display:'flex', alignItems:'center', gap:12 },
-  cardRight:   { display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' },
-  avatar:      { width:40, height:40, borderRadius:'50%', background:'#ede9fe', color:'#6d28d9', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:600, fontSize:15, flexShrink:0 },
-  name:        { fontSize:14, fontWeight:500, margin:0 },
-  meta:        { fontSize:12, color:'#6b7280', margin:'2px 0 0' },
-  badge:       { fontSize:12, padding:'2px 10px', borderRadius:20, background:'#f3f4f6', color:'#374151' },
-  deleteBox:   { display:'flex', alignItems:'center' },
-  inlineErr:   { display:'flex', alignItems:'center', gap:8, background:'#fef2f2', border:'1px solid #fecaca', borderRadius:8, padding:'6px 10px', fontSize:13, color:'#dc2626', maxWidth:360 },
-  btnPrimary:  { padding:'9px 16px', background:'#4f46e5', color:'#fff', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:500 },
-  btnSm:       { padding:'6px 12px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:6, fontSize:13, cursor:'pointer' },
-  btnDanger:   { padding:'6px 12px', background:'#dc2626', color:'#fff', border:'none', borderRadius:6, fontSize:13, cursor:'pointer' },
-  overlay:     { position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 },
-  modal:       { background:'#fff', borderRadius:12, padding:28, width:'100%', maxWidth:460, boxShadow:'0 20px 60px rgba(0,0,0,0.12)' },
-  modalTitle:  { fontSize:16, fontWeight:600, margin:'0 0 16px' },
-  modalActions:{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:16 },
-  label:       { display:'block', fontSize:12, fontWeight:500, color:'#374151', marginTop:12, marginBottom:4 },
-  input:       { width:'100%', padding:'8px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box' },
-}
+  page: { margin: '0 auto' },
+
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    margin: 0,
+    color: 'var(--text)'
+  },
+
+  sub: {
+    fontSize: 13,
+    color: 'var(--text-muted)',
+    marginTop: 3
+  },
+
+  search: {
+    width: '100%',
+    padding: '10px 14px',
+    fontSize: 14,
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    marginBottom: 16,
+    boxSizing: 'border-box',
+    background: 'var(--surface)',
+    color: 'var(--text)',
+    outline: 'none'
+  },
+
+  muted: {
+    color: 'var(--text-dim)',
+    fontSize: 14
+  },
+
+  err: {
+    color: 'var(--danger)',
+    fontSize: 13,
+    marginBottom: 10
+  },
+
+  empty: {
+    textAlign: 'center',
+    padding: '60px 0',
+    color: 'var(--text-dim)'
+  },
+
+  list: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))',
+    gap: 8
+  },
+
+  card: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '14px 16px',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    background: 'var(--surface)',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+
+  cardLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12
+  },
+
+  cardRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap'
+  },
+
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: '50%',
+    background: 'var(--primary)',
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 600,
+    fontSize: 15,
+    flexShrink: 0
+  },
+
+  name: {
+    fontSize: 20,
+    fontWeight: 500,
+    margin: 0,
+    color: 'var(--text)'
+  },
+
+  meta: {
+    fontSize: 14,
+    color: 'var(--text-muted)',
+    margin: '2px 0 0'
+  },
+
+  badge: {
+    fontSize: 12,
+    padding: '2px 10px',
+    borderRadius: 20,
+    background: 'var(--surface-2)',
+    color: 'var(--text-muted)'
+  },
+
+  deleteBox: {
+    display: 'flex',
+    alignItems: 'center'
+  },
+
+  inlineErr: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: 'var(--danger-bg)',
+    border: '1px solid var(--danger)',
+    borderRadius: 8,
+    padding: '6px 10px',
+    fontSize: 13,
+    color: 'var(--danger)',
+    maxWidth: 360
+  },
+
+  btnPrimary: {
+    padding: '9px 16px',
+    background: 'var(--primary)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 13,
+    cursor: 'pointer',
+    fontWeight: 500
+  },
+
+  btnSm: {
+    padding: '6px 12px',
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 13,
+    cursor: 'pointer',
+    color: 'var(--text)'
+  },
+
+  btnDanger: {
+    padding: '6px 12px',
+    background: 'var(--danger)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 13,
+    cursor: 'pointer'
+  },
+
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100
+  },
+
+  modal: {
+    background: 'var(--surface)',
+    borderRadius: 12,
+    padding: 28,
+    width: '100%',
+    maxWidth: 460,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    border: '1px solid var(--border)'
+  },
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: '0 0 16px',
+    color: 'var(--text)'
+  },
+
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 16
+  },
+
+  label: {
+    display: 'block',
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'var(--text-muted)',
+    marginTop: 12,
+    marginBottom: 4
+  },
+
+  input: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 14,
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    boxSizing: 'border-box',
+    background: 'var(--bg)',
+    color: 'var(--text)',
+    outline: 'none'
+  },
+};

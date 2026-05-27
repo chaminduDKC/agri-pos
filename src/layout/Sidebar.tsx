@@ -1,6 +1,7 @@
 // src/layout/Sidebar.tsx
 import { NavLink } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 const NAV_ITEMS = [
   { path: '/',           label: 'Dashboard',  icon: '▦' },
@@ -30,6 +31,8 @@ export default function Sidebar() {
   const [syncStatus, setSyncStatus]     = useState('idle')
   const [pendingCount, setPendingCount] = useState(0)
   const [isOnline, setIsOnline]         = useState(true)
+    const { user, logout }                = useAuth()
+  const [loggingOut, setLoggingOut]     = useState(false)
 
   useEffect(() => {
     // Get initial status
@@ -51,9 +54,15 @@ export default function Sidebar() {
     return unsub  // cleanup on unmount
   }, [])
 
+    const handleLogout = async () => {
+      console.log(user)
+    setLoggingOut(true)
+    await logout()
+    // AuthContext clears user → App.tsx shows Login
+  }
   const handleSyncNow = async () => {
     if (!isOnline) return
-    await window.api.sync.now()
+    // await window.api.sync.now()
   }
 
   return (
@@ -61,7 +70,7 @@ export default function Sidebar() {
       {/* Brand */}
       <div style={s.brand}>
         <span style={{ fontSize: 22 }}></span>
-        <span style={s.brandName}>AgroPro</span>
+        <span style={s.brandName}>SG</span>
       </div>
 
       {/* Nav */}
@@ -73,7 +82,6 @@ export default function Sidebar() {
             end={item.path === '/'}
             style={({ isActive }) => ({ ...s.navLink, ...(isActive ? s.navLinkActive : {}) })}
           >
-            <span style={s.navIcon}>{item.icon}</span>
             <span>{item.label}</span>
           </NavLink>
         ))}
@@ -96,6 +104,22 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      {user && (
+        <div style={s.userArea}>
+          <div style={s.userInfo}>
+            <div style={s.avatar}>{user?.email?.charAt(0).toUpperCase()}</div>
+            <div>
+              <p style={s.userName}>{user.email.split('@')[0]}</p>
+              <p style={s.userRole}>{user?.role}</p>
+            </div>
+          </div>
+          <button style={s.logoutBtn} onClick={handleLogout} disabled={loggingOut}
+            title="Sign out">
+            {loggingOut ? '...' : '⏻'}
+          </button>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse {
@@ -122,4 +146,10 @@ const s: Record<string, React.CSSProperties> = {
   syncLabel:    { fontSize: 12, color: '#e5e7eb', margin: 0, fontWeight: 500 },
   syncSub:      { fontSize: 11, color: '#6b7280', margin: '2px 0 0' },
   version:      { padding: '10px 18px', fontSize: 11, color: '#4a5566' },
+  userArea:  { margin: '0 10px 12px', padding: '10px 12px', borderRadius: 8, background: '#1f2937', display: 'flex', alignItems: 'center', gap: 8 },
+  userInfo:  { flex: 1, display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' },
+  avatar:    { width: 28, height: 28, borderRadius: '50%', background: '#4f46e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 },
+  userName:  { fontSize: 12, color: '#e5e7eb', margin: 0, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
+  userRole:  { fontSize: 10, color: '#6b7280', margin: '1px 0 0', textTransform: 'capitalize' as const },
+  logoutBtn: { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 16, padding: 4, flexShrink: 0 },
 }

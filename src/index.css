@@ -1,0 +1,67 @@
+/* =========================
+   COLOR SYSTEM
+========================= */
+
+:root {
+  /* --- Base --- */
+  --bg: #0f172a;
+  --surface: #111827;
+  --surface-2: #1f2937;
+  --surface-3: #374151;
+
+  /* --- Text --- */
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+
+  /* --- Borders --- */
+  --border: #1f2937;
+  --border-soft: #374151;
+
+  /* --- Brand --- */
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+
+  /* --- Status --- */
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+
+  /* --- Background states --- */
+  --success-bg: rgba(34,197,94,0.15);
+  --danger-bg: rgba(239,68,68,0.15);
+  --warning-bg: rgba(245,158,11,0.15);
+
+  /* --- Misc --- */
+  --radius: 10px;
+  --radius-sm: 6px;
+
+
+/* =========================
+   LIGHT MODE
+========================= */
+
+/* 
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #e5e7eb;
+
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-dim: #9ca3af;
+
+  --border: #e5e7eb;
+  --border-soft: #d1d5db;
+
+  --primary: #4f46e5;
+  --primary-hover: #6366f1;
+
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+
+  --success-bg: #dcfce7;
+  --danger-bg: #fee2e2;
+  --warning-bg: #fef3c7; */
+}

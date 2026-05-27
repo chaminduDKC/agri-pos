@@ -6,6 +6,7 @@ export interface Item {
   name: string
   category: string | null
   unit: string
+  unit_size?:string
   quantity: number
   low_stock_threshold: number
   barcode: string | null
@@ -18,6 +19,7 @@ export interface ItemInput {
   name: string
   category?: string
   unit: string
+  unit_size?:string
   quantity?: number
   low_stock_threshold?: number
   barcode?: string

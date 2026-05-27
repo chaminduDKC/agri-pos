@@ -23,8 +23,8 @@ export class NetMonitor {
 
   constructor(options?: { checkUrl?: string; intervalMs?: number }) {
     // Cloudflare DNS — reliable, fast, globally available
-    this.checkUrl    = options?.checkUrl    ?? 'https://1.1.1.1'
-    this.intervalMs  = options?.intervalMs  ?? 15_000 // check every 15s
+    this.checkUrl    = options?.checkUrl    ?? 'http://localhost:3000/health'
+    this.intervalMs  = options?.intervalMs  ?? 30_000 // check every 30s
   }
 
   // ── Start monitoring ──────────────────────────────────────

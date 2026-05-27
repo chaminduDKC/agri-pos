@@ -14,6 +14,19 @@ contextBridge.exposeInMainWorld('api', {
       return () => ipcRenderer.removeAllListeners('sync:status')
     },
   },
+   auth: {
+    login:    (email: string, password: string) => ipcRenderer.invoke('auth:login', email, password),
+    logout:   ()                                => ipcRenderer.invoke('auth:logout'),
+    getUser:  ()                                => ipcRenderer.invoke('auth:getUser'),
+    isLoggedIn: ()                              => ipcRenderer.invoke('auth:isLoggedIn'),
+
+    // Subscribe to session expired event pushed from main process
+    // Returns an unsubscribe function
+    onSessionExpired: (fn: () => void) => {
+      ipcRenderer.on('auth:sessionExpired', fn)
+      return () => ipcRenderer.removeListener('auth:sessionExpired', fn)
+    },
+  },
 
   clients: {
     getAll:  ()                       => ipcRenderer.invoke('db:clients:getAll'),
@@ -92,6 +105,39 @@ contextBridge.exposeInMainWorld('api', {
     recordPayment:          (id: string, amount: number) => ipcRenderer.invoke('db:invoices:recordPayment', id, amount),
     delete:                 (id: string)              => ipcRenderer.invoke('db:invoices:delete', id),
   },
+  allocations:{
+    returnChildToSub:(id:string, quantity:number)=> ipcRenderer.invoke('db:allocations:returnChildToSub', id, quantity),
+    markChildUsed:(input:any)=> ipcRenderer.invoke('db:allocations:markChildUsed', input),
+    returnSubToMain:(id:string, quantity:number)=> ipcRenderer.invoke('db:allocations:returnSubToMain', id, quantity),
+    markSubUsed:(id:string, quantity:any)=> ipcRenderer.invoke('db:allocations:markSubUsed', id, quantity),
+    createSubAllocation:(input:any)=> ipcRenderer.invoke('db:allocations:createSubAllocation', input),
+    createChildAllocation:(input:any)=> ipcRenderer.invoke('db:allocations:createChildAllocation', input),
+    create:(input:any)=> ipcRenderer.invoke('db:allocations:create', input),
+    getChildAllocationsByChildProject:(childId:string)=> ipcRenderer.invoke('db:allocations:getChildAllocationsByChildProject', childId),
+    getByProject: (projectId: string) => ipcRenderer.invoke('db:allocations:getByProject', projectId),
+    getById: (id: string) => ipcRenderer.invoke('db:allocations:getById', id),
+    allocate: (input: any) => ipcRenderer.invoke('db:allocations:allocate', input),
+    returnToInventory: (id: string, quantity: number) => ipcRenderer.invoke('db:allocations:returnToInventory', id, quantity),
+    delete: (id: string) => ipcRenderer.invoke('db:allocations:delete', id),
+    getSubAllocations: (projectAllocationId: string) => ipcRenderer.invoke('db:allocations:getSubAllocations', projectAllocationId),
+    getSubAllocationsBySubProject: (subProjectId: string) => ipcRenderer.invoke('db:allocations:getSubAllocationsBySubProject', subProjectId),
+    assignToSubProject: (input: any) => ipcRenderer.invoke('db:allocations:assignToSubProject', input),
+    markUsed: (id: string, quantityUsed: number) => ipcRenderer.invoke('db:allocations:markUsed', id, quantityUsed),
+  },
+  subProjects:{
+    getByProject: (projectId: string) => ipcRenderer.invoke('db:subProjects:getByProject', projectId),
+    getById: (id: string) => ipcRenderer.invoke('db:subProjects:getById', id),
+    create: (input: any) => ipcRenderer.invoke('db:subProjects:create', input),
+    createChild: (input: any) => ipcRenderer.invoke('db:subProjects:createChild', input),
+    updateStatus: (id: string, status: string) => ipcRenderer.invoke('db:subProjects:updateStatus', id, status),
+    update: (id: string, input: any) => ipcRenderer.invoke('db:subProjects:update', id, input),
+    delete: (id: string) => ipcRenderer.invoke('db:subProjects:delete', id),
+  },
+  childProjects:{
+getBySubProject:(subId:string)=> ipcRenderer.invoke('db:childProjects:getBySubProject', subId),
+delete:(childId:string)=> ipcRenderer.invoke('db:childProjects:delete', childId),
+create:(input:any)=> ipcRenderer.invoke('db:childProjects:create', input)
+  }
 
   
 })
@@ -108,6 +154,14 @@ export interface IElectronAPI {
     update:  (id: string, input: any) => Promise<{ success: boolean; data?: any; error?: string }>
     delete:  (id: string) => Promise<{ success: boolean; error?: string }>
   },
+   auth: {
+    login:            (email: string, password: string) => Promise<{ success: boolean; user?: any; error?: string }>
+    logout:           () => Promise<{ success: boolean }>
+    getUser:          () => Promise<{ success: boolean; user?: any }>
+    isLoggedIn:       () => Promise<boolean>
+    onSessionExpired: (fn: () => void) => () => void
+  },
+
   items: {
     getAll:        () => Promise<any>
     getLowStock:   () => Promise<any>
@@ -129,13 +183,31 @@ export interface IElectronAPI {
     update: (id: string, input: any) => Promise<any>; 
     updateStatus: (id: string, status: string) => Promise<any>; 
     delete: (id: string) => Promise<any> 
+    cascadeDelete: (id: string) => Promise<any>
   },
+  subProjects:{
+    getByProject: (projectId: string) => Promise<any>;
+    getById: (id: string) => Promise<any>;
+    create: (input: any) => Promise<any>;
+    createChild: (input: any) => Promise<any>;
+    updateStatus: (id: string, status: string) => Promise<any>;
+    update: (id: string, input: any) => Promise<any>;
+    delete: (id: string) => Promise<any>;
+  },
+  childProjects:{
+    getBySubProject:(subId:string)=> Promise<any>
+    delete:(childId:string)=> Promise<any>
+    create:(input:any)=> Promise<any>
+  }
+  
    sync: { getStatus: () => Promise<any>; now: () => Promise<any>; onStatus: (fn: (d: any) => void) => () => void }
   quotations: { getAll: () => Promise<any>; getByIdWithItems: (id: string) => Promise<any>; search: (q: string) => Promise<any>; create: (i: any) => Promise<any>; update: (id: string, i: any) => Promise<any>; updateStatus: (id: string, s: string) => Promise<any>; delete: (id: string) => Promise<any> }
   workers:    { getAll: () => Promise<any>; getById: (id: string) => Promise<any>; create: (i: any) => Promise<any>; update: (id: string, i: any) => Promise<any>; delete: (id: string) => Promise<any> }
   attendance: { getByProject: (id: string) => Promise<any>; getByWorkerAndPeriod: (wId: string, f: string, t: string) => Promise<any>; getSummary: (wId: string, f: string, t: string) => Promise<any>; mark: (i: any) => Promise<any>; delete: (id: string) => Promise<any> }
   paysheets:  { getAll: () => Promise<any>; getByWorker: (id: string) => Promise<any>; create: (i: any) => Promise<any>; updateStatus: (id: string, s: string) => Promise<any>; delete: (id: string) => Promise<any> }
   invoices:   { getAll: () => Promise<any>; getByClient: (id: string) => Promise<any>; getOutstandingSummary: () => Promise<any>; create: (i: any) => Promise<any>; update: (id: string, i: any) => Promise<any>; recordPayment: (id: string, amount: number) => Promise<any>; delete: (id: string) => Promise<any> }
+  allocations:{returnChildToSub:(id:string, quantity:number)=> Promise<any>,markChildUsed:(input:any)=> Promise<any>,returnSubToMain:(id:string, quantity:number)=> Promise<any>,markSubUsed:(input:any)=> Promise<any>,createChildAllocation:(input:any)=> Promise<any>,create:(input:any)=> Promise<any>, createSubAllocation:(input:any)=> Promise<any>, getChildAllocationsByChildProject:(childId:string)=> Promise<any>,
+    getByProject: (projectId: string) => Promise<any>; getById: (id: string) => Promise<any>; allocate: (input: any) => Promise<any>; returnToInventory: (id: string, quantity: number) => Promise<any>; delete: (id: string) => Promise<any>; getSubAllocations: (projectAllocationId: string) => Promise<any>; getSubAllocationsBySubProject: (subProjectId: string) => Promise<any>; assignToSubProject: (input: any) => Promise<any>; markUsed: (id: string, quantityUsed: number) => Promise<any> }
 
 
 

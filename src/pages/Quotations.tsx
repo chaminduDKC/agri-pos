@@ -367,40 +367,263 @@ export default function Quotations() {
     </div>
   )
 }
-
 const s: Record<string, React.CSSProperties> = {
-  page:        { maxWidth: 1000 },
-  header:      { display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 },
-  title:       { fontSize:22, fontWeight:600, margin:0 },
-  sub:         { fontSize:13, color:'#888', marginTop:3 },
-  tabs:        { display:'flex', gap:4, marginBottom:14, borderBottom:'1px solid #e5e7eb', paddingBottom:0 },
-  tab:         { padding:'8px 14px', fontSize:13, border:'none', background:'transparent', cursor:'pointer', color:'#6b7280', borderBottom:'2px solid transparent', marginBottom:-1 },
-  tabActive:   { color:'#4f46e5', borderBottomColor:'#4f46e5', fontWeight:500 },
-  tabCount:    { marginLeft:5, fontSize:11, background:'#f3f4f6', color:'#6b7280', padding:'1px 6px', borderRadius:10 },
-  search:      { width:'100%', padding:'10px 14px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:8, marginBottom:16, boxSizing:'border-box', background:'#fff' },
-  muted:       { color:'#888', fontSize:14 },
-  err:         { color:'#dc2626', fontSize:13, marginBottom:10 },
-  empty:       { textAlign:'center', padding:'60px 0', color:'#9ca3af' },
-  list:        { display:'flex', flexDirection:'column', gap:8 },
-  card:        { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 18px', border:'1px solid #e5e7eb', borderRadius:10, background:'#fff' },
-  cardLeft:    { flex:1 },
-  cardRight:   { display:'flex', alignItems:'center', gap:8, flexShrink:0 },
-  cardTitle:   { fontSize:14, fontWeight:600 },
-  projectTag:  { fontSize:11, padding:'2px 8px', borderRadius:10, background:'#ede9fe', color:'#5b21b6' },
-  cardMeta:    { fontSize:13, color:'#374151', margin:'2px 0 0' },
-  cardDate:    { fontSize:11, color:'#9ca3af', marginTop:2 },
-  statusBadge: { fontSize:11, padding:'3px 10px', borderRadius:20, fontWeight:500, cursor:'pointer', border:'none', appearance:'none' },
-  table:       { width:'100%', borderCollapse:'collapse', fontSize:13 },
-  th:          { padding:'8px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:0.4, borderBottom:'1px solid #e5e7eb', background:'#f9fafb' },
-  td:          { padding:'8px 10px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
-  btnPrimary:  { padding:'9px 16px', background:'#4f46e5', color:'#fff', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:500 },
-  btnSm:       { padding:'5px 10px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:6, fontSize:12, cursor:'pointer' },
-  btnDanger:   { padding:'5px 10px', background:'#dc2626', color:'#fff', border:'none', borderRadius:6, fontSize:12, cursor:'pointer' },
-  overlay:     { position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 },
-  modal:       { background:'#fff', borderRadius:12, padding:28, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.12)', maxHeight:'90vh', overflowY:'auto' },
-  modalTitle:  { fontSize:16, fontWeight:600, margin:'0 0 4px' },
-  modalActions:{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:20 },
-  grid2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 },
-  label:       { display:'block', fontSize:12, fontWeight:500, color:'#374151', marginTop:12, marginBottom:4 },
-  input:       { width:'100%', padding:'8px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box' },
-}
+  page: { margin: '0 auto' },
+
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    margin: 0,
+    color: '#e5e7eb'
+  },
+
+  sub: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginTop: 3
+  },
+
+  tabs: {
+    display: 'flex',
+    gap: 4,
+    marginBottom: 14,
+    borderBottom: '1px solid #2c3443'
+  },
+
+  tab: {
+    padding: '8px 14px',
+    fontSize: 13,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    color: '#9ca3af',
+    borderBottom: '2px solid transparent',
+    marginBottom: -1
+  },
+
+  tabActive: {
+    color: '#818cf8',
+    borderBottomColor: '#818cf8',
+    fontWeight: 500
+  },
+
+  tabCount: {
+    marginLeft: 5,
+    fontSize: 11,
+    background: '#2c3443',
+    color: '#9ca3af',
+    padding: '1px 6px',
+    borderRadius: 10
+  },
+
+  search: {
+    width: '100%',
+    padding: '10px 14px',
+    fontSize: 14,
+    border: '1px solid #2c3443',
+    borderRadius: 8,
+    marginBottom: 16,
+    boxSizing: 'border-box',
+    background: '#232a36',
+    color: '#e5e7eb',
+    outline: 'none'
+  },
+
+  muted: { color: '#6b7280', fontSize: 14 },
+
+  err: { color: '#f87171', fontSize: 13, marginBottom: 10 },
+
+  empty: {
+    textAlign: 'center',
+    padding: '60px 0',
+    color: '#6b7280'
+  },
+
+  list: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+    gap: 8
+  },
+
+  card: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '14px 18px',
+    border: '1px solid #2c3443',
+    borderRadius: 10,
+    background: '#232a36'
+  },
+
+  cardLeft: { flex: 1 },
+
+  cardRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0
+  },
+
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#f3f4f6'
+  },
+
+  projectTag: {
+    fontSize: 11,
+    padding: '2px 8px',
+    borderRadius: 10,
+    background: '#312e81',
+    color: '#c7d2fe'
+  },
+
+  cardMeta: {
+    fontSize: 13,
+    color: '#9ca3af',
+    margin: '2px 0 0'
+  },
+
+  cardDate: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 2
+  },
+
+  statusBadge: {
+    fontSize: 11,
+    padding: '3px 10px',
+    borderRadius: 20,
+    fontWeight: 500,
+    cursor: 'pointer',
+    border: 'none',
+    appearance: 'none',
+    background: '#2c3443',
+    color: '#9ca3af'
+  },
+
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 13
+  },
+
+  th: {
+    padding: '8px 10px',
+    textAlign: 'left',
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    borderBottom: '1px solid #2c3443',
+    background: '#1e2430'
+  },
+
+  td: {
+    padding: '8px 10px',
+    borderBottom: '1px solid #2c3443',
+    verticalAlign: 'middle',
+    color: '#e5e7eb'
+  },
+
+  btnPrimary: {
+    padding: '9px 16px',
+    background: '#6366f1',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 8,
+    fontSize: 13,
+    cursor: 'pointer',
+    fontWeight: 500
+  },
+
+  btnSm: {
+    padding: '5px 10px',
+    background: '#232a36',
+    border: '1px solid #2c3443',
+    borderRadius: 6,
+    fontSize: 12,
+    cursor: 'pointer',
+    color: '#e5e7eb'
+  },
+
+  btnDanger: {
+    padding: '5px 10px',
+    background: '#b91c1c',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 6,
+    fontSize: 12,
+    cursor: 'pointer'
+  },
+
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100
+  },
+
+  modal: {
+    background: '#232a36',
+    borderRadius: 12,
+    padding: 28,
+    width: '100%',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    border: '1px solid #2c3443'
+  },
+
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: '0 0 4px',
+    color: '#e5e7eb'
+  },
+
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 20
+  },
+
+  grid2: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12
+  },
+
+  label: {
+    display: 'block',
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#9ca3af',
+    marginTop: 12,
+    marginBottom: 4
+  },
+
+  input: {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: 14,
+    border: '1px solid #2c3443',
+    borderRadius: 6,
+    boxSizing: 'border-box',
+    background: '#1e2430',
+    color: '#e5e7eb',
+    outline: 'none'
+  },
+};
