@@ -134,6 +134,7 @@ contextBridge.exposeInMainWorld('api', {
     delete: (id: string) => ipcRenderer.invoke('db:subProjects:delete', id),
   },
   childProjects:{
+    updateStatus: (id: string, status: string) => ipcRenderer.invoke('db:childProjects:updateStatus', id, status),
 getBySubProject:(subId:string)=> ipcRenderer.invoke('db:childProjects:getBySubProject', subId),
 delete:(childId:string)=> ipcRenderer.invoke('db:childProjects:delete', childId),
 create:(input:any)=> ipcRenderer.invoke('db:childProjects:create', input)
@@ -195,6 +196,7 @@ export interface IElectronAPI {
     delete: (id: string) => Promise<any>;
   },
   childProjects:{
+    updateStatus: (id: string, status: string) => Promise<any>;
     getBySubProject:(subId:string)=> Promise<any>
     delete:(childId:string)=> Promise<any>
     create:(input:any)=> Promise<any>

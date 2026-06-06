@@ -79,6 +79,7 @@ export interface Allocation {
   quantity_assigned: number
   quantity_used: number
   quantity_returned: number
+  quantity_received_back: number
   created_at: string
 }
 
@@ -90,8 +91,8 @@ export interface SubAllocation {
   quantity_assigned: number
   quantity_used: number
   quantity_returned: number
+  quantity_received_back: number
   allocated_at: string
-  // joined
   item_name?: string
   item_unit?: string
   item_unit_size?: string | null
@@ -127,8 +128,9 @@ export interface CreateAllocationInput {
 
 export interface CreateSubAllocationInput {
   sub_project_id: string
-  allocation_id: string      // references allocations.id
+  allocation_id: string      
   quantity_allocated: number
+  quantity_received_back:number
 }
 
 export interface CreateChildAllocationInput {
@@ -183,6 +185,15 @@ export class SubProjectsRepository {
 
 
   updateStatus(id: string, status: string): SubProject | undefined {
+    const sub = this.db.prepare(`SELECT * FROM sub_projects WHERE id = ?`).get(id) as SubProject | undefined
+    if (!sub) throw new Error('Sub-project not found')
+      const childs = this.db.prepare(`SELECT * FROM child_projects WHERE parent_id = ?`).all(id) as any[];
+    if(childs.length> 0){
+      const completedCount = childs.filter((c:any)=> c.status === "completed").length;
+      if(status === "completed" && completedCount < childs.length){
+        throw new Error(`Cannot mark as completed: ${childs.length - completedCount} child projects still not completed.`)
+      }
+    }
     this.db.prepare(`UPDATE sub_projects SET status = ? WHERE id = ?`).run(status, id)
     return this.getById(id)
   }
@@ -362,7 +373,7 @@ markUsed(id: string, qty: number) {
       mainAlloc.quantity_used -
       mainAlloc.quantity_returned
 
-    if (input.quantity_allocated > available) {
+    if (input.quantity_allocated + input.quantity_received_back > available) {
       throw new Error(`Only ${available} ${mainAlloc.item_unit} available to assign`)
     }
 
@@ -434,13 +445,6 @@ markUsed(id: string, qty: number) {
     const sa = this.getSubAllocationById(id)
     if (!sa) throw new Error('Sub allocation not found')
 
-    const childCount = (this.db.prepare(`
-      SELECT COUNT(*) AS cnt FROM child_projects WHERE parent_id = ?
-    `).get(sa.sub_project_id) as { cnt: number }).cnt
-
-    if (childCount > 0) {
-      throw new Error('This sub-project has child projects. Return through child projects instead.')
-    }
 
     const returnable = sa.quantity_allocated - sa.quantity_used - sa.quantity_returned
     if (quantity > returnable) {
@@ -456,7 +460,7 @@ markUsed(id: string, qty: number) {
         // Free up the assigned pool in main allocation
         this.db.prepare(`
           UPDATE allocations
-          SET quantity_assigned = quantity_assigned - ?
+          SET quantity_received_back = quantity_received_back + ?
           WHERE id = ?
         `).run(quantity, sa.allocation_id)
       }
@@ -603,19 +607,10 @@ markUsed(id: string, qty: number) {
       // Free the assigned slot in sub allocation
       this.db.prepare(`
         UPDATE sub_allocations
-        SET quantity_assigned = quantity_assigned - ?
+        SET quantity_received_back = quantity_received_back + ?
         WHERE id = ?
-      `).run(quantity, ca.parent_id)
+      `).run(quantity,  ca.parent_id)
 
-      // Propagate return to main allocation
-      // if (ca.allocation_id) {
-      //   this.db.prepare(`
-      //     UPDATE allocations
-      //     SET quantity_assigned = quantity_assigned - ?,
-      //         quantity_returned = quantity_returned + ?
-      //     WHERE id = ?
-      //   `).run(quantity, quantity, ca.allocation_id)
-      // }
     })
 
     run()
@@ -680,6 +675,12 @@ export class ChildProjectsRepository {
     this.db = db
   }
 
+  updateStatus(id:string, status:string){
+    const child = this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(id) as any;
+    if(!child) throw new Error ("Child project not found")
+    this.db.prepare(`UPDATE child_projects SET status = ? WHERE id = ?`).run(status, id)
+      return this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(id) as any;
+  }
   getBySubProject(subId: string): any[] {
     return this.db.prepare(`
       SELECT * FROM child_projects
@@ -688,7 +689,13 @@ export class ChildProjectsRepository {
     `).all(subId) as any[]
   }
   delete(childId: string){
-    console.log("Delete Child ", childId)
+    const child = this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(childId) as any;
+    if(!child) throw new Error ("Child project not found")
+      const childAllocs = this.db.prepare(`SELECT * FROM child_allocations WHERE child_project_id = ?`).all(childId) as any[];
+      if(childAllocs.length > 0) throw new Error("Cannot delete child project with existing allocations. Please delete allocations first.")
+     this.db.prepare(`DELETE FROM child_projects WHERE id = ?`).run(childId);
+    const result = this.db.prepare(`DELETE FROM child_projects WHERE id = ?`).run(childId);
+    return { success: result.changes > 0 }
   }
 
   create(input:any){

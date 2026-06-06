@@ -5,6 +5,7 @@ export interface Item {
   id: string
   name: string
   category: string | null
+  source: string
   unit: string
   unit_size?:string
   quantity: number
@@ -17,6 +18,7 @@ export interface Item {
 
 export interface ItemInput {
   name: string
+  source: string
   category?: string
   unit: string
   unit_size?:string

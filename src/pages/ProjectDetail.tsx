@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 
 interface Project {
   id: string; title: string; client_name: string
@@ -18,6 +19,7 @@ interface Allocation {
   quantity_allocated: number; quantity_used: number
   quantity_returned: number; quantity_remaining: number
   quantity_assigned: number
+  quantity_received_back: number
   created_at: string
 }
 
@@ -29,6 +31,7 @@ interface SubAllocation {
   allocation_id: string;
   quantity_assigned: number; quantity_used: number
   quantity_returned: number; quantity_remaining: number
+  quantity_received_back: number
 }
 
 interface InventoryItem {
@@ -38,6 +41,7 @@ interface InventoryItem {
   quantity_returned: number;
   sub_project_id: string;
   quantity_assigned: number;
+  quantity_received_back: number;
   unit_size: string | null; quantity: number; item_unit_size: string
 }
 
@@ -200,17 +204,12 @@ export default function ProjectDetail() {
   const [returning, setReturning] = useState<Allocation | null>(null)
   const [returnQty, setReturnQty] = useState('')
   const [returnErr, setReturnErr] = useState('')
-  const [markUsedQty, setMarkUsedQty] = useState('')
   const [markUsedAllocation, setMarkUsedAllocation] = useState<Allocation>()
-  const [returningSubAlloc, setReturningSubAlloc] = useState<SubAllocation | null>(null)
-  const [returnSubQty, setReturnSubQty] = useState('')
-  const [returnSubErr, setReturnSubErr] = useState('')
   const [showMarkUsedModal, setShowMarkUsedModal] = useState<boolean>(false)
   const [errorTitle, setErrorTitle] = useState<string>("")
   const [subProject, setSubProject] = useState<SubProject>();
   const [showAllocated, setShowAllocated] = useState(false);
   const [showChildAllocatedItems, setShowChildAllocatedItems] = useState(false);
-  const [markQty, setMarkQty] = useState<Record<number, string>>({});
   const [allocatedItemsForSub, setAllocatedItemsForSub] = useState<Allocation[]>()
   const [allocatedItemsForChild, setAllocatedItemsForChild] = useState<Allocation[]>()
   const [showChildAlloc, setShowChildAlloc] = useState<boolean>(false)
@@ -224,26 +223,40 @@ export default function ProjectDetail() {
 
   const loadAll = useCallback(async () => {
     if (!id) return
-    const [projRes, allocRes, subRes, invRes] = await Promise.all([
-      window.api.projects.getById(id),
-      window.api.allocations.getByProject(id),
-      window.api.subProjects.getByProject(id),
-      window.api.items.getAll(),
-    ])
-    if (projRes.success) setProject(projRes.data)
-    if (allocRes.success) {
-      setAllocations(allocRes.data ?? [])
+    try {
+      const [projRes, allocRes, subRes, invRes] = await Promise.all([
+        window.api.projects.getById(id),
+        window.api.allocations.getByProject(id),
+        window.api.subProjects.getByProject(id),
+        window.api.items.getAll(),
+      ])
+      if (projRes.success) setProject(projRes.data)
+      if (allocRes.success) {
+        setAllocations(allocRes.data ?? [])
+      }
+      if (subRes.success) {
+        setSubProjects(subRes.data ?? [])
+      }
+      if (invRes.success) setInventory(invRes.data ?? [])
+    } catch (err) {
+      toast.error("Failed to load project data: " + (err instanceof Error ? err.message : "Unknown error"))
+    } finally {
+      setLoading(false)
     }
-    if (subRes.success) {
-      setSubProjects(subRes.data ?? [])
-    }
-    if (invRes.success) setInventory(invRes.data ?? [])
-    setLoading(false)
   }, [id])
 
   const loadSubAllocs = useCallback(async (subId: string) => {
-    const res = await window.api.allocations.getSubAllocationsBySubProject(subId)
-    if (res.success) setSubAllocs(res.data ?? [])
+    try {
+      const res = await window.api.allocations.getSubAllocationsBySubProject(subId)
+      if (res.success) {
+        setSubAllocs(res.data ?? [])
+      } else {
+        toast.error(res.error ?? 'Failed to load sub-allocations')
+      }
+    } catch (error) {
+      console.error(error)  // log unexpected errors
+      toast.error('Failed to load sub-allocations')
+    }
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
@@ -252,7 +265,7 @@ export default function ProjectDetail() {
     if (selectedSubId) loadSubAllocs(selectedSubId)
     else setSubAllocs([])
   }, [selectedSubId, loadSubAllocs])
-
+  
   const refresh = () => { loadAll(); if (selectedSubId) loadSubAllocs(selectedSubId) }
 
   const pickInventory = (itemId: string) => {
@@ -264,7 +277,6 @@ export default function ProjectDetail() {
   const pickSubInventory = (rowId: string) => {
     const item = subInventory.find(i => i.id === rowId)
     if (!item || !subProject) return
-
     setSubAllocForm(f => ({ ...f, row_id: rowId, sub_project_id: subProject?.id, item_id: item.item_id, allocation_id: item.id, item_name: item.item_name, item_unit: item.item_unit, item_unit_size: item.item_unit_size ?? '' }))
   }
 
@@ -275,121 +287,277 @@ export default function ProjectDetail() {
   }
 
   const getChildProjectsBySubProject = async (subId: string) => {
-    const res = await window.api.childProjects.getBySubProject(subId);
-    setChildren(res.data)
+    try {
+      const res = await window.api.childProjects.getBySubProject(subId);
+      if (res.success) setChildren(res.data)
+      else toast.error(res.error ?? "Failed to load child projects")
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Failed to load child projects")
+    }
   }
 
   const allocateForChildProject = async (childId: string, subProjectId: string) => {
     if (!childId || !subProjectId || !id) return;
-    const res = await window.api.allocations.getSubAllocationsBySubProject(subProjectId);
-    setChildInventory((res.data ?? []).filter((i: InventoryItem) => i.quantity_allocated - i.quantity_returned - i.quantity_used > 0))
+    try {
+      const res = await window.api.allocations.getSubAllocationsBySubProject(subProjectId);
+      if (res.success) setChildInventory((res.data ?? []).filter((i: InventoryItem) => i.quantity_allocated - i.quantity_returned - i.quantity_used > 0))
+      else toast.error(res.error || "Failed to load inventory for child allocation")
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Failed to load inventory for child allocation")
+    }
   }
 
   const getAllocatedItemsByChildProject = async (childId: string) => {
-    const res = await window.api.allocations.getChildAllocationsByChildProject(childId);
-    setAllocatedItemsForChild(res.data);
-    setShowChildAllocatedItems(true);
+    try {
+      const res = await window.api.allocations.getChildAllocationsByChildProject(childId);
+      if (res.success) {
+        setAllocatedItemsForChild(res.data); setShowChildAllocatedItems(true);
+      }
+      else {
+        toast.error(res.error || "Failed to load allocated items for child project")
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Failed to load allocated items for child project")
+    }
   }
 
   const getSubAllocations = async () => {
     if (!project) return
-    const res = await window.api.allocations.getByProject(project?.id)
-    setSubInventory((res.data ?? []).filter((si: InventoryItem) => si.quantity_allocated - (si.quantity_returned + si.quantity_used) > 0))
+    try {
+      const res = await window.api.allocations.getByProject(project?.id)
+      if (res.success) setSubInventory((res.data ?? []).filter((si: InventoryItem) => si.quantity_allocated - (si.quantity_returned + si.quantity_used) > 0))
+      else toast.error(res.error || "Failed to load sub-project inventory")
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Failed to load sub-project inventory")
+    }
   }
 
   const handleChildAlloc = async () => {
-    const res = await window.api.allocations.createChildAllocation(childAllocForm);
+    try {
+      const res = await window.api.allocations.createChildAllocation(childAllocForm);
+      if (res.success) {
+        refresh(); setShowChildAlloc(false); setChildAllocForm({
+          row_id: '', source: 'local', item_id: '', item_name: '', item_unit: '', item_unit_size: '', quantity_allocated: '', sub_project_id: ""
+        })
+        toast.success("Allocated Successfully")
+      }
+      else {
+        toast.error(res.error || "Failed to allocate for child project")
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error && error.message || "Failed to allocate for child project")
+    }
   }
   const handleMainAlloc = async () => {
     const { source, item_id, item_name, item_unit, item_unit_size, quantity } = mainAllocForm
     if (!item_name) { setMainAllocErr('Item name is required'); return }
     if (!item_unit) { setMainAllocErr('Unit is required'); return }
     if (!quantity || parseFloat(quantity) <= 0) { setMainAllocErr('Enter a valid quantity'); return }
-    if (source === 'local' && !item_id) { setMainAllocErr('Select an inventory item'); return }
-
-    const res = await window.api.allocations.create({
-      project_id: id!, item_id: item_id || undefined,
-      item_name, item_unit, item_unit_size: item_unit_size || undefined,
-      source, quantity_allocated: parseFloat(quantity),
-    })
-    if (res.success) {
-      setShowMainAlloc(false)
-      setMainAllocForm({ source: 'local', item_id: '', item_name: '', item_unit: '', item_unit_size: '', quantity: '' })
-      setMainAllocErr('')
-      refresh()
-    } else setMainAllocErr(res.error ?? 'Failed')
+    if (!item_id && source === "local") { setMainAllocErr('Select an inventory item'); return }
+    try {
+      const res = await window.api.allocations.create({
+        project_id: id!, item_id: item_id || undefined,
+        item_name, item_unit, item_unit_size: item_unit_size || undefined,
+        source, quantity_allocated: parseFloat(quantity),
+      })
+      if (res.success) {
+        toast.success("Allocated Successfully")
+        setShowMainAlloc(false)
+        setMainAllocForm({ source: 'local', item_id: '', item_name: '', item_unit: '', item_unit_size: '', quantity: '' })
+        setMainAllocErr('')
+        refresh()
+      } else { setMainAllocErr(res.error ?? 'Failed'); toast.error(res.error || "Failed to Allocate") }
+    } catch (error) {
+      console.error(error)
+      setMainAllocErr('Failed to create allocation')
+      toast.error(error instanceof Error ? error.message : 'Failed to create allocation')
+    }
   }
 
   const getSubAllocationsForSubProject = async (sub: SubProject) => {
-    if (!sub) return
-    const res = await window.api.allocations.getSubAllocationsBySubProject(sub?.id);
-    setAllocatedItemsForSub(res.data)
+    if (!sub) { toast.error("Invalid sub-project"); return }
+    try {
+      const res = await window.api.allocations.getSubAllocationsBySubProject(sub?.id);
+      if (res.success) setAllocatedItemsForSub(res.data)
+      else toast.error(res.error || "Failed to load allocations for sub-project")
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to load allocations for sub-project")
+    }
   }
 
   const handleSubAlloc = async () => {
-    const { source, item_id, item_name, item_unit, quantity_allocated } = subAllocForm
+    const { item_name, item_unit, quantity_allocated } = subAllocForm
     if (!item_name) { setMainAllocErr('Item name is required'); return }
     if (!item_unit) { setMainAllocErr('Unit is required'); return }
-    if (!quantity_allocated || parseFloat(quantity_allocated) <= 0) { setMainAllocErr('Enter a valid quantity'); return }
-    if (source === 'local' && !item_id) { setMainAllocErr('Select an inventory item'); return }
-    const res = await window.api.allocations.createSubAllocation(subAllocForm)
+    if (!quantity_allocated || parseFloat(quantity_allocated) <= 0) { toast.error("Invalid quantity"); setMainAllocErr('Enter a valid quantity'); return }
+    try {
+      const res = await window.api.allocations.createSubAllocation(subAllocForm)
+      console.log(res)
+      if (res.success) {
+        refresh();
+        setShowSubAlloc(false);
+      } else {
+        toast.error(res.error || "Failed to create sub-allocation")
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to create sub-allocation")
+    }
+
   }
 
   const handleAddSub = async () => {
     if (!addSubForm.title.trim() || !addSubForm.location.trim()) { setAddSubErr('Title and Location are required'); return }
-    const res = await window.api.subProjects.create({ project_id: id!, title: addSubForm.title, notes: addSubForm.notes, location: addSubForm.location })
-    if (res.success) { setShowAddSub(false); setAddSubForm({ title: '', notes: '', location: '' }); setAddSubErr(''); refresh() }
-    else setAddSubErr(res.error ?? 'Failed')
+    try {
+      const res = await window.api.subProjects.create({ project_id: id!, title: addSubForm.title, notes: addSubForm.notes, location: addSubForm.location })
+      if (res.success) { toast.success("Sub-project created successfully"); setShowAddSub(false); setAddSubForm({ title: '', notes: '', location: '' }); setAddSubErr(''); refresh() }
+      else { setAddSubErr(res.error ?? 'Failed'); toast.error(res.error || "Failed to create sub-project") }
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to create sub-project")
+    }
   }
 
   const handleAddChild = async () => {
-    if (!subProject) return
-    if (!addChildForm.title.trim() || !addChildForm.location.trim()) { setAddChildErr('Title and Location are required'); return }
-    const res = await window.api.childProjects.create({ project_id: id!, parent_id: subProject?.id, title: addChildForm.title, notes: addChildForm.notes, location: addChildForm.location })
-    if (res.success) { getChildProjectsBySubProject(subProject.id); setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr(''); refresh() }
-    else setAddChildErr(res.error ?? 'Failed')
+    if (!subProject) { toast.error("Select a sub-project"); return }
+    if (!addChildForm.title.trim() || !addChildForm.location.trim()) { toast.error("Title and Location are required"); setAddChildErr('Title and Location are required'); return }
+    try {
+      const res = await window.api.childProjects.create({ project_id: id!, parent_id: subProject?.id, title: addChildForm.title, notes: addChildForm.notes, location: addChildForm.location })
+      if (res.success) { toast.success("Child project created successfully"); getChildProjectsBySubProject(subProject.id); setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr(''); refresh() }
+      else { setAddChildErr(res.error ?? 'Failed'); toast.error(res.error || "Failed to create child project") }
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to create child project")
+    }
   }
 
   const handleReturn = async () => {
     if (!returning) return
     const qty = parseFloat(returnQty)
-    if (!qty || qty <= 0) { setReturnErr('Enter a valid quantity'); return }
-    const res = await window.api.allocations.returnToInventory(returning.id, qty)
-    if (res.success) { setReturning(null); setReturnQty(''); setReturnErr(''); refresh() }
-    else setReturnErr(res.error ?? 'Failed')
+    if (!qty || qty <= 0) { toast.error("Enter a valid quantity"); setReturnErr('Enter a valid quantity'); return }
+    try {
+      const res = await window.api.allocations.returnToInventory(returning.id, qty)
+      if (res.success) { toast.success("Item returned to inventory successfully"); setReturning(null); setReturnQty(''); setReturnErr(''); refresh() }
+      else { setReturnErr(res.error ?? 'Failed'); toast.error(res.error || "Failed to return") }
+    } catch (error) {
+      toast.error("Failed to return item")
+      console.error(error)
+    }
   }
 
   const handleMarkUsed = async (item: any) => {
     if (!item || !usedQty) return
-    if (isNaN(usedQty) || usedQty < 0) return
-    const res = await window.api.allocations.markUsed(item.id, usedQty)
-    if (res.success) { setUsedQty(0); refresh(); setShowMarkUsedModal(false) }
-    else alert(res.error)
+    if (isNaN(usedQty) || usedQty < 0) { toast.error("Enter a valid quantity"); return }
+    try {
+      const res = await window.api.allocations.markUsed(item.id, usedQty)
+      if (res.success) { toast.success("Marked as Used"); setUsedQty(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr(""); setShowMarkUsedModal(false) }
+      else {
+        setAdjustingId(""); toast.error(res.error || "Something went wrong"); setAdjustingIdForReturn(""); setMainAllocErr(res.error || "Something wernt wrong.");;
+        console.log("Error marking used:", res?.error)
+        setUsedQty(0)
+      }
+    } catch (error) {
+      console.error("Error marking used:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to mark as used")
+    }
   }
 
   const handleReturnInSub = async (subAlloc: Allocation) => {
-    if (!subAlloc || !qtyToReturn) return
-    const res = await window.api.allocations.returnSubToMain(subAlloc.id, qtyToReturn)
-    console.log(res)
+    if (!subAlloc || !qtyToReturn) { toast.error("Enter a valid quantity"); return }
+    try {
+      const res = await window.api.allocations.returnSubToMain(subAlloc.id, qtyToReturn)
+      console.log(res)
+      if (res.success) {
+        setQtyToReturn(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); toast.success("Item return to main project"); setMainAllocErr(""); setShowAllocated(false);
+      } else {
+        setAdjustingId(""); setAdjustingIdForReturn(""); toast.error("Failed to return item"); setMainAllocErr(res.error || "Something wernt wrong.")
+      }
+    } catch (error) {
+      toast.error("Failed to return item")
+      console.error(error)
+    }
+
   }
+
   const handleReturnInChild = async (childAlloc: Allocation) => {
-    if (!childAlloc || !qtyToReturn) return
-    const res = await window.api.allocations.returnChildToSub(childAlloc.id, qtyToReturn)
-    console.log(res)
+    if (!childAlloc || !qtyToReturn) { toast.error("Enter a valid quantity"); return }
+    try {
+      const res = await window.api.allocations.returnChildToSub(childAlloc.id, qtyToReturn)
+      if (res.success) { toast.success("Item returned successfully"); setQtyToReturn(0); refresh(); setShowAllocated(false); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to return item")
+      console.error(error)
+    }
   }
 
   const handleDeleteSub = async (subId: string) => {
     if (!confirm('Delete this sub-project and all its data?')) return
-    const res = await window.api.subProjects.delete(subId)
-    if (res.success) { if (selectedSubId === subId) setSelectedSubId(null); refresh() }
-    else console.error(res.error)
+    try {
+      const res = await window.api.subProjects.delete(subId)
+      if (res.success) { toast.success("Sub project deleted successfully"); if (selectedSubId === subId) setSelectedSubId(null); refresh() }
+      else toast.error(res.error)
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Something went wrong. Try again later")
+    }
+  }
+
+  const handleChildStatus = async (childId: string, status: string) => {
+    if (!childId || !status) { toast.error("Child project or status is missing"); return }
+    try {
+      const res = await window.api.childProjects.updateStatus(childId, status)
+      if (res.success) {
+        getChildProjectsBySubProject(selectedSubId!)
+        toast.success("Status Updated");
+      }
+      else {
+        toast.error(res.error)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Something went wrong")
+      console.error(error)
+    }
   }
 
   const handleSubStatus = async (subId: string, status: string) => {
-    await window.api.subProjects.updateStatus(subId, status)
-    refresh()
+    if (!subId || !status) { toast.error("Sub project or status is missing"); return }
+    try {
+      const res = await window.api.subProjects.updateStatus(subId, status)
+      if (res.success) {
+        getChildProjectsBySubProject(selectedSubId!)
+        toast.success('Status updated')
+        refresh();
+      }
+      else {
+        toast.error(res.error);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Something went wrong")
+    }
   }
 
+  const handleDeleteChild = async (childId: string) => {
+    if (!childId) { toast.error("Child project is missing"); return }
+    try {
+      const res = await window.api.childProjects.delete(childId);
+      if (res.success) {
+        toast.success("Child project deleted");
+        getChildProjectsBySubProject(selectedSubId!)
+      } else {
+        toast.error("Failed to delete: ", res.error);
+        console.error(res.error)
+      }
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : "Something went wrong");
+    }
+  }
   const childSubAllocs = (childId: string) =>
     subAllocs.filter(sa => sa.sub_project_id === childId)
 
@@ -422,7 +590,7 @@ export default function ProjectDetail() {
             {allocations.length === 0 && <p style={s.empty}>No allocations yet</p>}
 
             {allocations.map(a => {
-              const remaining = a.quantity_allocated - a.quantity_used - a.quantity_returned - a.quantity_assigned
+              const remaining = (a.quantity_allocated + a.quantity_received_back) - a.quantity_used - a.quantity_returned - a.quantity_assigned
               return (
                 <div key={a.id} style={s.card}>
                   <div style={s.cardRow}>
@@ -445,6 +613,7 @@ export default function ProjectDetail() {
                     ['Returned', a.quantity_returned, '#22c55e'],
                     ['Remaining', remaining, remaining > 0 ? '#f59e0b' : '#6b7280'],
                     ['Assigned', a.quantity_assigned, '#82e90d'],
+                    ['Received Back', a.quantity_received_back, '#10b981'],
                   ]} />
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <div style={s.cardActions}>
@@ -504,7 +673,7 @@ export default function ProjectDetail() {
 
 
                   <div style={{ display: 'flex', gap: 10 }} onClick={e => e.stopPropagation()}>
-                    <button style={s.btnPrimary} onClick={(e) => { e.stopPropagation(); setShowAllocated(true); setSubProject(sub); getSubAllocationsForSubProject(sub) }}>View Items</button>
+                    <button style={s.btnPrimary} onClick={(e) => { e.stopPropagation(); setSubProject(sub); getSubAllocationsForSubProject(sub); setShowAllocated(true); }}>View Items</button>
                     <button style={s.btnWarn} onClick={(e) => { e.stopPropagation(); setSubProject(sub); setShowAddChild(true) }}>+Child</button>
                     <button style={s.btnSuccess} onClick={(e) => { e.stopPropagation(); setSubProject(sub); getSubAllocations(); setShowSubAlloc(true) }}>Allocate</button>
                   </div>
@@ -526,9 +695,7 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════
-            COL 3 — Child projects of selected sub
-        ══════════════════════════════════════════ */}
+        {/* 3 — Child projects of selected sub */}
         <div style={s.colLast}>
           <div style={s.colHeader}>
             <p style={s.colTitle}>
@@ -557,7 +724,7 @@ export default function ProjectDetail() {
                     <p style={s.cardTitle}>{child.title}</p>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <StatusBadge status={child.status} />
-                      <button style={s.btnDanger} onClick={() => handleDeleteSub(child.id)}>✕</button>
+                      <button style={s.btnDanger} onClick={() => handleDeleteChild(child.id)}>✕</button>
                     </div>
                   </div>
 
@@ -579,15 +746,10 @@ export default function ProjectDetail() {
                           ]} />
                           <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
                             <button style={s.btnSuccess}
-                              onClick={() => { setMarkUsedQty(String(sa.quantity_used || '')) }}>
+                              onClick={() => { }}>
                               Mark used
                             </button>
-                            {sa.quantity_remaining > 0 && (
-                              <button style={s.btnWarn}
-                                onClick={() => { setReturningSubAlloc(sa); setReturnSubQty(''); setReturnSubErr('') }}>
-                                Return
-                              </button>
-                            )}
+
                           </div>
                         </div>
                       ))}
@@ -598,18 +760,18 @@ export default function ProjectDetail() {
                     <div style={{ ...s.cardActions }}>
                       <select
                         value={child.status}
-                        onChange={e => handleSubStatus(child.id, e.target.value)}
+                        onChange={e => { handleChildStatus(child.id, e.target.value); console.log(child.status) }}
                         style={{ ...s.btn, cursor: 'pointer', fontSize: 11 }}>
                         <option value="pending">Pending</option>
                         <option value="in_progress">In progress</option>
                         <option value="completed">Completed</option>
                       </select>
                     </div>
-                    <div>
-                      <button onClick={() => { setChildProject(child); getAllocatedItemsByChildProject(child.id) }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button style={s.btnPrimary} onClick={() => { setChildProject(child); getAllocatedItemsByChildProject(child.id) }}>
                         View Items
                       </button>
-                      <button onClick={() => {
+                      <button style={s.btnSuccess} onClick={() => {
                         if (!selectedSub || !child) return;
                         setChildProjectId(child.id);
                         setShowChildAlloc(true); allocateForChildProject(child.id, selectedSub?.id)
@@ -626,9 +788,7 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      {/* ════════════════════════════════════════════════════
-          OVERLAYS
-      ════════════════════════════════════════════════════ */}
+      {/* oVERLAYS */}
 
       {showChildAllocatedItems && (
         <div style={s.overlay} onClick={() => setShowChildAllocatedItems(false)}>
@@ -641,7 +801,7 @@ export default function ProjectDetail() {
               <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => setShowChildAllocatedItems(false)}>✕</button>
             </div>
 
-            { allocatedItemsForChild?.length === 0 && (
+            {allocatedItemsForChild?.length === 0 && (
               <div style={{ color: '#9ca3af' }}>No items allocated to this child project yet</div>
             )}
             <div style={{ overflowY: 'auto', flex: 1, padding: '0.75rem 1.25rem 1rem' }}>
@@ -746,7 +906,7 @@ export default function ProjectDetail() {
               {(['local', 'external'] as const).map(src => (
                 <button key={src}
                   style={mainAllocForm.source === src ? s.sourceBtnOn : s.sourceBtn}
-                  onClick={() => setMainAllocForm(f => ({ ...f, source: src, item_id: '', item_name: '', item_unit: '' }))}>
+                  onClick={() => setMainAllocForm(f => ({ ...f, source: src, item_id: '', quantity: "", item_name: '', item_unit_size: "", item_unit: '' }))}>
                   {src === 'local' ? '📦 Inventory' : '🚚 External'}
                 </button>
               ))}
@@ -790,7 +950,7 @@ export default function ProjectDetail() {
             </div>
 
             <div style={s.formRow}>
-              <button style={s.btn} onClick={() => setShowMainAlloc(false)}>Cancel</button>
+              <button style={s.btn} onClick={() => { setShowMainAlloc(false); setMainAllocForm(f => ({ ...f, item_id: '', quantity: "", item_name: '', item_unit_size: "", item_unit: '' })) }}>Cancel</button>
               <button style={s.btnLg} onClick={handleMainAlloc}>Allocate</button>
             </div>
           </div>
@@ -808,7 +968,7 @@ export default function ProjectDetail() {
                 <label style={s.label}>Inventory item *</label>
                 <select style={s.input} value={subAllocForm.row_id} onChange={e => pickSubInventory(e.target.value)}>
                   <option value="">Select item…</option>
-                  {subInventory.map(i => <option key={i.id} value={i.id}>{i.item_name} — {i.quantity_allocated - (i.quantity_returned + i.quantity_used + i.quantity_assigned)} {i.item_unit} available</option>)}
+                  {subInventory.map(i => <option key={i.id} value={i.id}>{i.item_name} — {(i.quantity_allocated + i.quantity_received_back) - (i.quantity_returned + i.quantity_used + i.quantity_assigned)} {i.item_unit} available</option>)}
                 </select>
               </div>
               <div style={s.fieldGroup}>
@@ -817,7 +977,7 @@ export default function ProjectDetail() {
                   onChange={e => setSubAllocForm(f => ({ ...f, quantity_allocated: e.target.value }))} />
               </div>
               <div style={s.formRow}>
-                <button style={s.btn} onClick={() => setShowSubAlloc(false)}>Cancel</button>
+                <button style={s.btn} onClick={() => { setShowSubAlloc(false); setSubAllocForm({ row_id: '', source: 'local', item_id: '', item_name: '', item_unit: '', item_unit_size: '', quantity_allocated: '', sub_project_id: "" }) }}>Cancel</button>
                 <button style={s.btnLg} onClick={handleSubAlloc}>Allocate</button>
               </div>
             </div>
@@ -835,7 +995,7 @@ export default function ProjectDetail() {
               <label style={s.label}>Inventory item *</label>
               <select style={s.input} value={childAllocForm.item_id} onChange={e => pickChildInventory(e.target.value)}>
                 <option value="">Select item…</option>
-                {childInventory.map(i => <option key={i.id} value={i.id}>{i.item_name} — {i.quantity_allocated - (i.quantity_returned + i.quantity_used + i.quantity_assigned)} {i.item_unit} available</option>)}
+                {childInventory.map(i => <option key={i.id} value={i.id}>{i.item_name} — {(i.quantity_allocated + i.quantity_received_back) - (i.quantity_returned + i.quantity_used + i.quantity_assigned)} {i.item_unit} available</option>)}
               </select>
             </div>
             <div style={s.fieldGroup}>
@@ -882,20 +1042,20 @@ export default function ProjectDetail() {
         </div>
       )}
 
-
-
       {/* sub allocated items */}
 
       {showAllocated && (
-        <div style={s.overlay} onClick={() => setShowAllocated(false)}>
+        <div style={s.overlay} onClick={() => { setShowAllocated(false); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr("") }}>
           <div style={{ ...s.formPanel, maxWidth: 660, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}>
 
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1.25rem',  flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1.25rem', flexShrink: 0 }}>
               <p style={s.formTitle}>Allocated items to {subProject?.title}</p>
-              <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => setShowAllocated(false)}>✕</button>
+
+              <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => { setShowAllocated(false); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr("") }}>✕</button>
             </div>
+            {mainAllocErr && <div style={s.errBox}>{mainAllocErr}</div>}
 
             {/* Scrollable list */}
 
@@ -904,11 +1064,11 @@ export default function ProjectDetail() {
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <p style={s.empty}>No items allocated to this sub-project yet</p>
                 </div>
-              ) 
+              )
             }
             <div style={{ overflowY: 'auto', flex: 1, padding: '0.75rem 1.25rem 1rem' }}>
               {allocatedItemsForSub?.map(item => {
-                const remaining = item.quantity_allocated - item.quantity_used - item.quantity_returned - item.quantity_assigned;
+                const remaining = item.quantity_allocated - item.quantity_used - item.quantity_returned - item.quantity_assigned + item.quantity_received_back;
                 return (
                   <div key={item.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, width: "100%", padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
 
@@ -927,6 +1087,7 @@ export default function ProjectDetail() {
                           color: remaining <= 0 ? '#f85149' : '#8b949e'
                         },
                         { label: 'Assigned', value: item.quantity_assigned, bg: 'rgba(188,140,255,0.15)', color: '#bc8cff' },
+                        { label: 'Received Back', value: item.quantity_received_back, bg: 'rgba(16,185,129,0.15)', color: '#10b981' },
                       ].map(({ label, value, bg, color }) => (
                         <span key={label} style={{ ...s.statBadge, background: bg, color, padding: "10px 20px", textAlign: "center" }}>
                           {label}: <strong>{value}</strong>
@@ -958,11 +1119,11 @@ export default function ProjectDetail() {
 
                           </div>
 
-                        ) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned > 0 ? (
+                        ) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
                           <button onClick={() => { setAdjustingId(item.id) }}>
                             Mark Used
                           </button>
-                        ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No more available to mark as used or return</span>)}
+                        ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No available to mark as used</span>)}
 
 
 
@@ -970,7 +1131,7 @@ export default function ProjectDetail() {
                       </div>
 
                       <div style={{ display: 'flex', gap: 5 }}>
-                        {item.quantity_remaining > 0 && adjustingIdForReturn === item.id && (
+                        {item.quantity_remaining > 0 && adjustingIdForReturn === item.id ? (
                           <div style={{ display: 'flex', gap: 5 }}>
 
                             <input
@@ -983,13 +1144,13 @@ export default function ProjectDetail() {
                               value={qtyToReturn}
                               onChange={e => setQtyToReturn(parseInt(e.target.value))}
                             />
-                            <button style={s.btn} onClick={() => handleReturnInSub(item)}>Return</button>
-                          </div>)}
-                        {item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned > 0 && !adjustingIdForReturn && (
-                          <button onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
-                            Return
-                          </button>
-                        )}
+                            <button style={s.btn} onClick={() => handleReturnInSub(item)}>Real Return</button>
+                          </div>) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
+                            <button onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
+                              Return
+                            </button>
+                          ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No available to return</span>)}
+
 
 
                       </div>
@@ -1006,13 +1167,13 @@ export default function ProjectDetail() {
 
             {/* Footer */}
             {
-               allocatedItemsForSub?.length !== 0 && (
-<div style={{ padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button style={s.btn} onClick={() => { setShowAllocated(false); setAdjustingId(""); setAdjustingIdForReturn(""); }}>Close</button>
-            </div>
-               )
+              allocatedItemsForSub?.length !== 0 && (
+                <div style={{ padding: '0.75rem 1.25rem', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                  <button style={s.btn} onClick={() => { setShowAllocated(false); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr("") }}>Close</button>
+                </div>
+              )
             }
-            
+
 
           </div>
         </div>
@@ -1020,7 +1181,7 @@ export default function ProjectDetail() {
 
       {/* Add child project */}
       {showAddChild && (
-        <div style={s.overlay} onClick={() => setShowAddChild(false)}>
+        <div style={s.overlay} onClick={() => { setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr('') }}>
           <div style={s.formPanel} onClick={e => e.stopPropagation()}>
             <p style={s.formTitle}>New child project under <em style={{ color: '#818cf8' }}>{subProject?.title}</em></p>
             {addChildErr && <div style={s.errBox}>{addChildErr}</div>}
@@ -1041,7 +1202,7 @@ export default function ProjectDetail() {
                 value={addChildForm.notes} onChange={e => setAddChildForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             <div style={s.formRow}>
-              <button style={s.btn} onClick={() => setShowAddChild(false)}>Cancel</button>
+              <button style={s.btn} onClick={() => { setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr('') }}>Cancel</button>
               <button style={s.btnLg} onClick={handleAddChild}>Add</button>
             </div>
           </div>
@@ -1085,15 +1246,13 @@ export default function ProjectDetail() {
         </div>
       )}
 
-
-
       {/* Mark used */}
-      {showMarkUsedModal && (
+      {showMarkUsedModal && markUsedAllocation && (
         <div style={s.overlay} onClick={() => { }}>
           <div style={s.formPanel} onClick={e => e.stopPropagation()}>
             <p style={s.formTitle}>Mark usedqq — {markUsedAllocation?.item_name}</p>
             <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
-              Remaining to use : <strong style={{ color: '#e5e7eb' }}>{markUsedAllocation?.quantity_allocated - markUsedAllocation?.quantity_returned - markUsedAllocation?.quantity_used - markUsedAllocation?.quantity_assigned} items of {markUsedAllocation?.item_unit_size}</strong>
+              Remaining to use : <strong style={{ color: '#e5e7eb' }}>{(markUsedAllocation?.quantity_allocated + markUsedAllocation?.quantity_received_back) - markUsedAllocation?.quantity_returned - markUsedAllocation?.quantity_used - markUsedAllocation?.quantity_assigned} items of {markUsedAllocation?.item_unit_size || "this item"}</strong>
             </p>
             <div style={s.fieldGroup}>
               <label style={s.label}>Quantity used</label>
@@ -1102,36 +1261,12 @@ export default function ProjectDetail() {
                 onKeyDown={e => e.key === 'Enter' && handleMarkUsed(markUsedAllocation)} />
             </div>
             <div style={s.formRow}>
-              <button style={s.btn} onClick={() => setShowMarkUsedModal(false)}>Cancel</button>
+              <button style={s.btn} onClick={() => { setShowMarkUsedModal(false); setUsedQty(0); }}>Cancel</button>
               <button style={s.btnLg} onClick={() => handleMarkUsed(markUsedAllocation)}>Save</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Return from sub allocation */}
-      {returningSubAlloc && (
-        <div style={s.overlay} onClick={() => setReturningSubAlloc(null)}>
-          <div style={s.formPanel} onClick={e => e.stopPropagation()}>
-            <p style={s.formTitle}>Return — {returningSubAlloc.item_name}</p>
-            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
-              Max: <strong style={{ color: '#f59e0b' }}>{returningSubAlloc.quantity_remaining} {returningSubAlloc.item_unit}</strong>
-            </p>
-            {returnSubErr && <div style={s.errBox}>{returnSubErr}</div>}
-            <div style={s.fieldGroup}>
-              <label style={s.label}>Quantity to return *</label>
-              <input style={s.input} type="number" value={returnSubQty} autoFocus min={0}
-                onChange={e => setReturnSubQty(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleReturnSubAlloc()} />
-            </div>
-            <div style={s.formRow}>
-              <button style={s.btn} onClick={() => setReturningSubAlloc(null)}>Cancel</button>
-              <button style={s.btnLg} onClick={handleReturnSubAlloc}>Return</button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   )
 }

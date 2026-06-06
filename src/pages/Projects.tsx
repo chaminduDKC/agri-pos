@@ -34,6 +34,7 @@ export default function Projects() {
   const [loading, setLoading]   = useState(true)
   const [filter, setFilter]     = useState('all')
   const [showCreate, setShowCreate] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>();
 
   const load = async () => {
     const [projRes, clientRes] = await Promise.all([
@@ -55,12 +56,13 @@ export default function Projects() {
     ...acc, [st]: projects.filter(p => p.status === st).length
   }), {} as Record<string, number>)
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation()
-    if (!confirm('Delete this project and all its data?')) return
-    //const res = await window.api.projects.fullDelete(id)
-    //if (res.success) setProjects(prev => prev.filter(p => p.id !== id))
-    //else alert(res.error)
+  const handleDelete = async (id: string) => {
+    if(!id) return;
+    const res = await window.api.projects.delete(id)
+    if (res.success) setProjects(prev => prev.filter(p => p.id !== id))
+    else {
+      console.log("Delete failed: ", res.error);
+  }
   }
 
   return (
@@ -150,7 +152,7 @@ export default function Projects() {
                   Open →
                 </button>
                 <button style={{ ...s.btnSm, color: '#dc2626', borderColor: '#fca5a5' }}
-                  onClick={e => handleDelete(e, p.id)}>
+                  onClick={() => {setDeleteId(p.id);}}>
                   Delete
                 </button>
               </div>
@@ -169,6 +171,27 @@ export default function Projects() {
           }}
           onClose={() => setShowCreate(false)}
         />
+      )}
+
+      {/* delete modal */}
+      {deleteId && (
+        <div style={s.overlay} onClick={() => setDeleteId(null)}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+            <p style={s.modalTitle}>Are you sure you want to delete this project?</p>
+            <div style={s.modalFooter}>
+              <button style={s.btnPrimary} onClick={() => setDeleteId(null)}>
+                Cancel
+              </button>
+              <button style={{ ...s.btnPrimary, backgroundColor: '#dc2626', borderColor: '#fca5a5' }}
+                onClick={() => {
+                  handleDelete(deleteId);
+                 
+                }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

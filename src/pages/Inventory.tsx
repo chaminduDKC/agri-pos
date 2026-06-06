@@ -5,7 +5,7 @@ import ComboBox from '../components/ComboBox';
 
 
 const UNITS = ['units', 'meters', 'kg', 'liters', 'rolls', 'boxes', 'bags', 'pairs']
-const emptyForm: ItemInput = { name: '', category: '', unit: 'units', quantity: 0, low_stock_threshold: 5, barcode: '', supplier: '', unit_price: 0, unit_size:"" }
+const emptyForm: ItemInput = { name: '', category: '', unit: 'units', quantity: 0, low_stock_threshold: 5, barcode: '', supplier: '', unit_price: 0, source:"local",unit_size:"" }
 
 export default function Inventory() {
   const { items, categories, loading, error, search, createItem, updateItem, setQuantity, deleteItem } = useItems()
@@ -32,7 +32,7 @@ export default function Inventory() {
 
   const openEdit = (item: Item) => {
     setEditingId(item.id)
-    setForm({ name: item.name, category: item.category ?? '', unit: item.unit, quantity: item.quantity, low_stock_threshold: item.low_stock_threshold, barcode: item.barcode ?? '', supplier: item.supplier ?? '', unit_price: item.unit_price })
+    setForm({ name: item.name, category: item.category ?? '', source: item.source ?? '', unit: item.unit, quantity: item.quantity, low_stock_threshold: item.low_stock_threshold, barcode: item.barcode ?? '', supplier: item.supplier ?? '', unit_price: item.unit_price })
     setFormError(null); setShowForm(true)
   }
   const closeForm = () => { setShowForm(false); setSku(''); setEditingId(null); setForm(emptyForm); setFormError(null) }
@@ -198,67 +198,84 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
 
       {/* Modal */}
       {showForm && (
-        <div style={s.overlay} >
-          <div style={s.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 ,}}>
-              <h3 style={s.modalTitle}>{editingId ? 'Edit Item' : 'New Item'}</h3>
-              <button style={s.btnSm} onClick={closeForm} disabled={saving}>Close</button>
-            </div>
-            
-            {formError && <p style={s.err}>{formError}</p>}
-            <div style={s.grid2}>
-              {field('name', 'Name *')}
-              <div>
-                <label style={s.label}>Category</label>
-                <ComboBox
-                  value={form.category ?? ''}
-                  options={categories}
-                  onChange={val => {
-                    setForm(f => ({ ...f, category: val }))
-                    
-                  }}
-                  placeholder="e.g. pipes, valves, pumps..."
-                />
-              </div>
-            </div>
-            <div style={s.grid2}>
-              <div>
-                <label style={s.label}>Unit *</label>
-                <select style={s.input} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
-                </select>
+  <div style={s.overlay}>
+    <div style={s.modal} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h3 style={s.modalTitle}>{editingId ? 'Edit Item' : 'New Item'}</h3>
+        <button style={s.btnSm} onClick={closeForm} disabled={saving}>Close</button>
+      </div>
 
-                <label style={s.label}>Unit size</label>
-                <input style={s.input} type='text' placeholder="60m..." value={form.unit_size || ''} onChange={e => {
-                  setForm(f => ({ ...f, unit_size: e.target.value }))
-                  handleCreateSku(e.target.value, form.name, form.category);
-                }} />
-              </div>
-              {field('quantity', 'Initial quantity', 'number')}
-            </div>
-            <div style={s.grid2}>
-              {field('low_stock_threshold', 'Alert when below', 'number')}
-              {field('unit_price', 'Unit price (Rs)', 'number')}
-            </div>
-            <div style={s.grid2}>
-              
-              <div style={{
-                width:'100%', marginTop:32, padding:'6px 12px', fontSize:14, border:'1px solid #e5e7eb', borderRadius:6, boxSizing:'border-box'
-              }}>
-                <span style={{ color:'#ffffff', fontStyle:'italic' }}>{sku ? sku : <span style={{ color:'#ffffff', fontStyle:'italic' }}>SKU will be generated here</span>}</span>
-                
-              </div>
-              {field('supplier', 'Supplier')}
-            </div>
-            <div style={s.modalActions}>
-           
-              <button style={s.btnPrimary} onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Item'}
-              </button>
-            </div>
-          </div>
+      {formError && <p style={s.err}>{formError}</p>}
+
+      {/* Row 1: Name + Category */}
+      <div style={s.grid2}>
+        {field('name', 'Name *')}
+        <div>
+          <label style={s.label}>Category</label>
+          <ComboBox
+            value={form.category ?? ''}
+            options={categories}
+            onChange={val => setForm(f => ({ ...f, category: val }))}
+            placeholder="e.g. pipes, valves, pumps..."
+          />
         </div>
-      )}
+      </div>
+
+      {/* Row 2: Unit + Unit size */}
+      <div style={s.grid2}>
+        <div>
+          <label style={s.label}>Unit *</label>
+          <select style={s.input} value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
+            {UNITS.map(u => <option key={u}>{u}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={s.label}>Unit size</label>
+          <input
+            style={s.input}
+            type='text'
+            placeholder="60m..."
+            value={form.unit_size || ''}
+            onChange={e => {
+              setForm(f => ({ ...f, unit_size: e.target.value }));
+              handleCreateSku(e.target.value, form.name, form.category);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Row 3: Unit price + Quantity */}
+      <div style={s.grid2}>
+        {field('unit_price', 'Unit price (Rs)', 'number')}
+        {field('quantity', 'Initial quantity', 'number')}
+      </div>
+
+      {/* Row 4: Alert threshold + SKU */}
+      <div style={s.grid2}>
+        {field('low_stock_threshold', 'Alert when below', 'number')}
+        <div style={{
+          width: '100%', marginTop: 32, padding: '6px 12px', fontSize: 14,
+          border: '1px solid #e5e7eb', borderRadius: 6, boxSizing: 'border-box'
+        }}>
+          <span style={{ color: '#ffffff', fontStyle: 'italic' }}>
+            {sku ? sku : <span style={{ color: '#ffffff', fontStyle: 'italic' }}>SKU will be generated here</span>}
+          </span>
+        </div>
+      </div>
+
+      {/* Row 5: Supplier */}
+      <div style={s.grid2}>
+        {field('supplier', 'Supplier')}
+      </div>
+
+      <div style={s.modalActions}>
+        <button style={s.btnPrimary} onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Add Item'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   )
 }

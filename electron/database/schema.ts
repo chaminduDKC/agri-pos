@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS items (
   barcode             TEXT     UNIQUE,     -- scanned from product label
   supplier            TEXT,
   unit_price          REAL     DEFAULT 0,
+  source              TEXT     NOT NULL
+                               CHECK(source IN ('local','external')),
+  created_at          TEXT     DEFAULT (datetime('now')),
   updated_at          TEXT     DEFAULT (datetime('now'))
 );
 
@@ -204,6 +207,7 @@ CREATE TABLE IF NOT EXISTS allocations (
   quantity_assigned   REAL     DEFAULT 0,
   quantity_used       REAL     DEFAULT 0,
   quantity_returned   REAL     DEFAULT 0,
+  quantity_received_back   REAL     DEFAULT 0,
   created_at          TEXT     DEFAULT (datetime('now'))
 );
 
@@ -217,6 +221,7 @@ CREATE TABLE IF NOT EXISTS sub_allocations (
   quantity_assigned         REAL  NOT NULL,
   quantity_used             REAL  DEFAULT 0,
   quantity_returned         REAL  DEFAULT 0,
+  quantity_received_back   REAL     DEFAULT 0,
   allocated_at              TEXT  DEFAULT (datetime('now'))
 );
 
@@ -230,10 +235,6 @@ CREATE TABLE IF NOT EXISTS child_allocations (
   quantity_returned         REAL  DEFAULT 0,
   allocated_at              TEXT  DEFAULT (datetime('now'))
 );
-
-
-
-
 
 -- ════════════════════════════════
 --  LAYER 4 — SYSTEM TABLES

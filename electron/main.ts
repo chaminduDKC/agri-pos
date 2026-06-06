@@ -235,6 +235,7 @@ function registerIpcHandlers() {
   ipcMain.handle('db:childProjects:getBySubProject', (_e, subId)=> wrap(()=> childProjects.getBySubProject(subId)))
   ipcMain.handle('db:childProjects:create', (_e, input)=> wrap(()=> childProjects.create(input)))
   ipcMain.handle('db:childProjects:delete', (_e, childId)=> wrap(()=> childProjects.delete(childId)))
+  ipcMain.handle('db:childProjects:updateStatus', (_e, childId, status)=> wrap(()=> childProjects.updateStatus(childId, status)))
 }
 
 // ── Helpers ───────────────────────────────────────────────────

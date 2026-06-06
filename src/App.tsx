@@ -13,11 +13,8 @@ import Paysheets   from './pages/Paysheets'
 import Invoices    from './pages/Invoices'
 import ProjectDetail from './pages/ProjectDetail'
 
-const Placeholder = ({ name }: { name: string }) => (
-  <div style={{ padding: 40, color: '#888', fontSize: 15 }}>
-    <strong>{name}</strong> — coming soon
-  </div>
-)
+import { ToastContainer, toast } from 'react-toastify';
+
 
 // ── Inner app — only renders after auth check ──────────────────
 function AppRoutes() {
@@ -37,6 +34,7 @@ function AppRoutes() {
 
   // Logged in → show app
   return (
+    <>
     <HashRouter>
       <Routes>
         <Route element={<AppShell />}>
@@ -50,7 +48,17 @@ function AppRoutes() {
           <Route path="/invoices"   element={<Invoices />} />
         </Route>
       </Routes>
+     <ToastContainer
+        position="bottom-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+      />
     </HashRouter>
+
+    </>
   )
 }
 
