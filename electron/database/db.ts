@@ -1,19 +1,21 @@
-// db.ts
+
+
+//{ db.ts
 // ─────────────────────────────────────────────────────────────
 // WHY THIS FILE IS THE SINGLE ENTRY POINT FOR THE DATABASE:
-//
+
 //   All database access in your app goes through this file.
 //   It ensures:
 //     1. Only ONE connection is ever open (singleton pattern)
 //     2. Foreign keys are always enabled
 //     3. Schema is always initialized on first run
 //     4. Migrations run automatically on startup
-//
+
 //   Usage anywhere in main process:
 //     import { getDb } from './database/db'
 //     const db = getDb()
 //     const clients = db.prepare('SELECT * FROM clients').all()
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────}
 
 import Database from 'better-sqlite3'
 import { app } from 'electron'
@@ -72,7 +74,7 @@ export function initializeDb(): void {
   // Open the connection
   // verbose: logs every SQL statement to console in development
   db = new Database(dbPath, {
-    verbose: process.env.NODE_ENV === 'development' ? console.log : undefined
+    //verbose: process.env.NODE_ENV === 'development' ? console.log : undefined
   })
 
   // CRITICAL: Enable foreign key enforcement.

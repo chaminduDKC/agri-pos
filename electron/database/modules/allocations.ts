@@ -520,9 +520,11 @@ markUsed(id: string, qty: number) {
   createChildAllocation(input: CreateChildAllocationInput): ChildAllocation {
     const subAlloc = this.getSubAllocationById(input.parent_id)
     if (!subAlloc) throw new Error('Sub allocation not found')
+      console.log(subAlloc)
 
     const available =
-      subAlloc.quantity_allocated -
+      subAlloc.quantity_allocated +
+      subAlloc.quantity_received_back -
       subAlloc.quantity_assigned -
       subAlloc.quantity_used -
       subAlloc.quantity_returned

@@ -219,6 +219,7 @@ export default function ProjectDetail() {
   const [adjustingId, setAdjustingId] = useState<string>("");
   const [adjustingIdForReturn, setAdjustingIdForReturn] = useState<string>("");
   const [childProject, setChildProject] = useState<SubProject>();
+  const [selectedAllocationInSubProject, setSelectedAllocationInSubProject] = useState<InventoryItem>();
 
 
   const loadAll = useCallback(async () => {
@@ -276,6 +277,8 @@ export default function ProjectDetail() {
 
   const pickSubInventory = (rowId: string) => {
     const item = subInventory.find(i => i.id === rowId)
+    setSelectedAllocationInSubProject(item)
+    console.log(item)
     if (!item || !subProject) return
     setSubAllocForm(f => ({ ...f, row_id: rowId, sub_project_id: subProject?.id, item_id: item.item_id, allocation_id: item.id, item_name: item.item_name, item_unit: item.item_unit, item_unit_size: item.item_unit_size ?? '' }))
   }
@@ -337,6 +340,7 @@ export default function ProjectDetail() {
   }
 
   const handleChildAlloc = async () => {
+    console.log("Called")
     try {
       const res = await window.api.allocations.createChildAllocation(childAllocForm);
       if (res.success) {
@@ -346,6 +350,7 @@ export default function ProjectDetail() {
         toast.success("Allocated Successfully")
       }
       else {
+        console.error(res.error)
         toast.error(res.error || "Failed to allocate for child project")
       }
     } catch (error) {
@@ -396,10 +401,15 @@ export default function ProjectDetail() {
     if (!item_name) { setMainAllocErr('Item name is required'); return }
     if (!item_unit) { setMainAllocErr('Unit is required'); return }
     if (!quantity_allocated || parseFloat(quantity_allocated) <= 0) { toast.error("Invalid quantity"); setMainAllocErr('Enter a valid quantity'); return }
+    if (!selectedAllocationInSubProject) return
+    const remaining = (selectedAllocationInSubProject?.quantity_allocated + selectedAllocationInSubProject?.quantity_received_back) - (selectedAllocationInSubProject.quantity_assigned + selectedAllocationInSubProject.quantity_returned + selectedAllocationInSubProject.quantity_used)
+    if(remaining < parseFloat(quantity_allocated)) {toast.error(`Maximum amount is ${remaining}`);return} 
     try {
       const res = await window.api.allocations.createSubAllocation(subAllocForm)
       console.log(res)
       if (res.success) {
+        toast.success("Sub-allocation created successfully")
+        setSubAllocForm({ row_id: '', source: 'local', item_id: '', item_name: '', item_unit: '', item_unit_size: '', quantity_allocated: '', sub_project_id: "" })
         refresh();
         setShowSubAlloc(false);
       } else {
@@ -452,17 +462,21 @@ export default function ProjectDetail() {
   }
 
   const handleMarkUsed = async (item: any) => {
-    if (!item || !usedQty) return
+    if (!item || !usedQty || ! markUsedAllocation) return
     if (isNaN(usedQty) || usedQty < 0) { toast.error("Enter a valid quantity"); return }
+    let remaining = (markUsedAllocation?.quantity_allocated + markUsedAllocation?.quantity_received_back) - markUsedAllocation?.quantity_returned - markUsedAllocation?.quantity_used - markUsedAllocation?.quantity_assigned;
+    if(remaining < usedQty) {toast.error(`Maximum Quantity is ${remaining}`);return}
     try {
       const res = await window.api.allocations.markUsed(item.id, usedQty)
-      if (res.success) { toast.success("Marked as Used"); setUsedQty(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr(""); setShowMarkUsedModal(false) }
+      if (res.success) {setShowChildAllocatedItems(false); setShowAllocated(false); toast.success("Marked as Used"); setUsedQty(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr(""); setShowMarkUsedModal(false) }
+      if(childProject) {getAllocatedItemsByChildProject(childProject.id);}
       else {
-        setAdjustingId(""); toast.error(res.error || "Something went wrong"); setAdjustingIdForReturn(""); setMainAllocErr(res.error || "Something wernt wrong.");;
+        setAdjustingId(""); toast.error(res.error || "Something went wrong"); setShowAllocated(false); setAdjustingIdForReturn(""); setMainAllocErr(res.error || "Something wernt wrong.");;
         console.log("Error marking used:", res?.error)
         setUsedQty(0)
       }
     } catch (error) {
+      setShowAllocated(false)
       console.error("Error marking used:", error)
       toast.error(error instanceof Error ? error.message : "Failed to mark as used")
     }
@@ -489,7 +503,8 @@ export default function ProjectDetail() {
     if (!childAlloc || !qtyToReturn) { toast.error("Enter a valid quantity"); return }
     try {
       const res = await window.api.allocations.returnChildToSub(childAlloc.id, qtyToReturn)
-      if (res.success) { toast.success("Item returned successfully"); setQtyToReturn(0); refresh(); setShowAllocated(false); }
+      if(!childProject) return;
+      if (res.success) {getAllocatedItemsByChildProject(childProject.id); toast.success("Item returned successfully"); setQtyToReturn(0); refresh(); setShowAllocated(false); }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to return item")
       console.error(error)
@@ -839,7 +854,10 @@ export default function ProjectDetail() {
 
                             <button style={s.btn} onClick={() => {
                               setMarkUsedAllocation(item);
-                              if (item.quantity_allocated - item.quantity_returned - item.quantity_used > 0) handleMarkUsed(item)
+                              if(usedQty === 0 || !usedQty) return
+                              const remaining = item.quantity_allocated - (item.quantity_used + item.quantity_returned)
+                              if(remaining < usedQty) {toast.error(`remaining ${remaining}`);return}
+                              if (item.quantity_allocated - item.quantity_returned - item.quantity_used > 0){ handleMarkUsed(item)}
                               else setErrorTitle("Not available remaining items to use")
                             }}>Save</button>
                             <input
@@ -874,7 +892,13 @@ export default function ProjectDetail() {
                               value={qtyToReturn}
                               onChange={e => setQtyToReturn(parseInt(e.target.value))}
                             />
-                            <button style={s.btn} onClick={() => handleReturnInChild(item)}>Return</button>
+                            <button style={s.btn} onClick={() =>{ 
+                               if(qtyToReturn === 0 || !qtyToReturn) return
+                              const remaining = item.quantity_allocated - (item.quantity_used + item.quantity_returned)
+                              if(remaining < qtyToReturn) {toast.error(`remaining ${remaining}`);return}
+                              handleReturnInChild(item)
+
+                            }}>Return</button>
                           </div>)}
                         {item.quantity_allocated - item.quantity_returned - item.quantity_used > 0 && adjustingIdForReturn !== item.id && (
                           <button onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
@@ -1055,7 +1079,7 @@ export default function ProjectDetail() {
 
               <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => { setShowAllocated(false); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr("") }}>✕</button>
             </div>
-            {mainAllocErr && <div style={s.errBox}>{mainAllocErr}</div>}
+            {/* {mainAllocErr && <div style={s.errBox}>{mainAllocErr}</div>} */}
 
             {/* Scrollable list */}
 
@@ -1103,8 +1127,11 @@ export default function ProjectDetail() {
 
                             <button style={s.btn} onClick={() => {
                               setMarkUsedAllocation(item);
+                              if(usedQty === 0 || !usedQty) {toast.error("Enter the amount"); return}
+                              const remaining = (item.quantity_allocated + item.quantity_received_back) - (item.quantity_assigned + item.quantity_returned + item.quantity_used);
+                              if(remaining < usedQty) {toast.error(`Maximum is ${remaining}`); return}
                               if (item.quantity_allocated - item.quantity_returned - item.quantity_used > 0) handleMarkUsed(item)
-                              else setErrorTitle("Not available remaining items to use")
+                                else toast.error("Not available remaining items to use")
                             }}>Save</button>
                             <input
                               style={{ ...s.input, flex: 1, height: 32 }}
@@ -1115,12 +1142,12 @@ export default function ProjectDetail() {
                               placeholder="Used"
                               value={usedQty}
                               onChange={e => setUsedQty(parseInt(e.target.value))}
-                            />
+                              />
 
                           </div>
 
-                        ) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
-                          <button onClick={() => { setAdjustingId(item.id) }}>
+) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
+  <button onClick={() => { setUsedQty(0);setAdjustingId(item.id) }}>
                             Mark Used
                           </button>
                         ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No available to mark as used</span>)}
@@ -1143,8 +1170,14 @@ export default function ProjectDetail() {
                               placeholder="Qty to return"
                               value={qtyToReturn}
                               onChange={e => setQtyToReturn(parseInt(e.target.value))}
-                            />
-                            <button style={s.btn} onClick={() => handleReturnInSub(item)}>Real Return</button>
+                              />
+                            <button style={s.btn} onClick={() => {
+                              const remaining = (item.quantity_allocated + item.quantity_received_back) - (item.quantity_assigned + item.quantity_returned + item.quantity_used);
+                              if(qtyToReturn === 0 || !qtyToReturn) {toast.error("Enter the amount"); setQtyToReturn(0); return}
+                              if(remaining < qtyToReturn) {toast.error(`Maximum is ${remaining}`); setQtyToReturn(0); return}
+
+                              handleReturnInSub(item)
+                              }}>Real Return</button>
                           </div>) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
                             <button onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
                               Return

@@ -27,13 +27,13 @@ export default function Invoices() {
   const [invoices, setInvoices]   = useState<Invoice[]>([])
   const [clients, setClients]     = useState<{ id: string; name: string }[]>([])
   const [projects, setProjects]   = useState<{ id: string; title: string; client_id: string }[]>([])
-  const [quotations, setQuotations] = useState<{ id: string; client_id: string; total_amount: number }[]>([])
+  const [quotations, setQuotations] = useState<{ id: string; client_id: string; total_amount: number; transport_installation:number }[]>([])
   const [loading, setLoading]     = useState(true)
   const [filter, setFilter]       = useState('all')
 
   // Create form
   const [showForm, setShowForm]   = useState(false)
-  const [form, setForm]           = useState({ project_id: '', client_id: '', quotation_id: '', amount_due: 0, due_date: '', notes: '' })
+  const [form, setForm]           = useState({ project_id: '', client_id: '', quotation_id: '', amount_due: 0, transport_installation:0, due_date: '', notes: '' })
   const [formErr, setFormErr]     = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
 
@@ -56,7 +56,7 @@ export default function Invoices() {
     if (inv.success)  setInvoices(inv.data ?? [])
     if (cli.success)  setClients(cli.data ?? [])
     if (proj.success) setProjects(proj.data ?? [])
-    if (quot.success) setQuotations(quot.data ?? [])
+    if (quot.success) {setQuotations(quot.data ?? []); console.log("Quotations ", quot.data)}
     if (sum.success)  setSummary(sum.data)
     setLoading(false)
   }, [])
@@ -71,19 +71,24 @@ export default function Invoices() {
   const clientQuotations = quotations.filter(q => q.client_id === form.client_id)
 
   const openForm = () => {
-    setForm({ project_id: '', client_id: clients[0]?.id ?? '', quotation_id: '', amount_due: 0, due_date: '', notes: '' })
+    setForm({ project_id: '', client_id: clients[0]?.id ?? '', quotation_id: '', amount_due: 0, transport_installation:0, due_date: '', notes: '' })
     setFormErr(null); setShowForm(true)
   }
 
   const handleQuotationPick = (quotationId: string) => {
     const q = quotations.find(q => q.id === quotationId)
-    setForm(f => ({ ...f, quotation_id: quotationId, amount_due: q?.total_amount ?? f.amount_due }))
+    if(!q) setForm(prev => ({...prev, quotation_id:"", amount_due:0}))
+    setForm(f => ({ ...f, quotation_id: quotationId, amount_due: q
+      ? (q.total_amount ?? 0) + (q.transport_installation ?? 0)
+      :( f.amount_due + f.transport_installation) }))
   }
 
   const handleSave = async () => {
     if (!form.client_id)   { setFormErr('Client is required'); return }
     if (!form.project_id)  { setFormErr('Project is required'); return }
     if (!form.amount_due)  { setFormErr('Amount due is required'); return }
+    console.log(form)
+    
     setSaving(true)
     const res = await window.api.invoices.create({
       ...form,
@@ -136,7 +141,7 @@ export default function Invoices() {
       <div style={s.summaryRow}>
         <div style={s.summaryCard}>
           <p style={s.summaryLabel}>Total invoiced</p>
-          <p style={s.summaryValue}>Rs {summary.total_due.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</p>
+          <p style={s.summaryValue}>Rs {(summary.total_due).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</p>
         </div>
         <div style={s.summaryCard}>
           <p style={s.summaryLabel}>Collected</p>
@@ -185,7 +190,7 @@ export default function Invoices() {
                           {inv.payment_status.charAt(0).toUpperCase() + inv.payment_status.slice(1)}
                         </span>
                       </td>
-                      <td style={{ ...s.td, fontSize: 12, color: inv.due_date && new Date(inv.due_date) < new Date() && inv.payment_status !== 'paid' ? '#dc2626' : undefined }}>
+                      <td style={{ ...s.td, fontSize: 12, color: inv.due_date && new Date(inv.due_date) < new Date() && inv.payment_status !== 'paid' ? '#dc2626' : "white" }}>
                         {inv.due_date ?? <span style={{ color: '#d1d5db' }}>—</span>}
                       </td>
                       <td style={s.td}>
@@ -252,12 +257,12 @@ export default function Invoices() {
                   onChange={e => handleQuotationPick(e.target.value)}
                   disabled={!form.client_id}>
                   <option value="">No quotation</option>
-                  {clientQuotations.map(q => <option key={q.id} value={q.id}>Rs {q.total_amount.toFixed(2)}</option>)}
+                  {clientQuotations.map(q => <option key={q.id} value={q.id}>Rs {(q.total_amount +q.transport_installation ).toLocaleString('en-LK', {maximumFractionDigits:2, minimumFractionDigits:2})}</option>)}
                 </select>
               </div>
               <div>
                 <label style={s.label}>Amount due (Rs) *</label>
-                <input style={s.input} type="number" value={form.amount_due}
+                <input style={s.input} type="number" value={(form.amount_due)}
                   onChange={e => setForm(f => ({ ...f, amount_due: parseFloat(e.target.value) || 0 }))} />
               </div>
             </div>

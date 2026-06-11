@@ -1,7 +1,6 @@
 // electron/database/modules/projects.ts
 
 import Database from 'better-sqlite3'
-import { log } from 'console'
 import { randomUUID } from 'crypto'
 
 export interface Project {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { initializeDb, closeDb, getDb } from './database/db'
@@ -11,6 +11,9 @@ import { WorkersRepository, AttendanceRepository } from './database/modules/work
 import { PaysheetsRepository }  from './database/modules/paysheets'
 import { InvoicesRepository }   from './database/modules/invoices'
 import { AllocationsRepository, ChildProjectsRepository, SubProjectsRepository } from './database/modules/allocations'
+import fs from 'fs'
+import { debugToken } from './auth/tokenStore'
+import { request } from './auth/httpClient'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -41,15 +44,17 @@ function createWindow() {
 app.whenReady().then(() => {
   try { initializeDb() } catch (err) { console.error('[DB] Failed:', err); app.quit(); return }
 
-  registerAuthHandlers(ipcMain, () => win)
+  registerAuthHandlers(ipcMain)
   registerIpcHandlers()
   createWindow()
+  debugToken()
 
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
 app.on('before-quit', () => closeDb())
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+
 
 function registerIpcHandlers() {
   const db = getDb()
@@ -67,12 +72,59 @@ function registerIpcHandlers() {
 
   const getAdminId = () => (db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string }).id
 
-  // ── Test ──────────────────────────────────────────────────
+
   ipcMain.handle('ping',    () => 'pong')
   ipcMain.handle('db:test', () => {
     try { return { success: true, users: db.prepare('SELECT id,name,email,role FROM users').all() } }
     catch (err: any) { return { success: false, error: err.message } }
   })
+
+
+
+
+    ipcMain.handle('checkInternet', async () => {
+    try{
+      const res = await request("GET",`/check-internet` )
+      console.log(res)
+      return res
+    } catch(error){
+      console.log(error)
+      return false
+    }
+  })
+
+
+
+
+  ipcMain.handle('generateQuotationPdf', async (_, data) => {
+    try {
+
+      const res = await request("POST", '/quotation/pdf', data, 'arraybuffer');
+      if (res.status === 401) {
+        return { success: false, error: 'Unauthorized. Please log in again.' }
+      }
+
+      const pdfBuffer = Buffer.from(res);
+
+      const documentsPath = app.getPath("documents")
+      const folderPath = path.join(documentsPath, "Southern-greenhouse", "Quotations")
+
+      await fs.promises.mkdir(folderPath, {recursive:true});
+
+
+      const savePath = path.join(
+        folderPath,
+        `quotation-${Date.now()}.pdf`
+      );
+      
+      await fs.promises.writeFile(savePath, pdfBuffer);
+      await shell.openPath(savePath);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  });
+
+
 
   // ── Clients ───────────────────────────────────────────────
   ipcMain.handle('db:clients:getAll',  () => wrap(() => clients.getAllWithStats()))
@@ -205,7 +257,6 @@ function registerIpcHandlers() {
   // ── Sub-projects ──────────────────────────────────────────
   ipcMain.handle('db:subProjects:getByProject', (_e, projectId) => wrap(() => subProjects.getByProject(projectId)))
   ipcMain.handle('db:subProjects:create',       (_e, input)     => wrap(() => subProjects.create(input)))
-  ipcMain.handle('db:subProjects:createChild',  (_e, input)     => wrap(() => subProjects.createChild(input)))
   ipcMain.handle('db:subProjects:updateStatus', (_e, id, status)=> wrap(() => subProjects.updateStatus(id, status)))
   ipcMain.handle('db:subProjects:update',       (_e, id, input) => wrap(() => subProjects.update(id, input)))
   ipcMain.handle('db:subProjects:delete',       (_e, id)        => wrap(() => subProjects.delete(id)))

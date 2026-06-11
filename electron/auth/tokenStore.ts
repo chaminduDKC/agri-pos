@@ -24,6 +24,26 @@ export interface StoredTokens {
   }
 }
 
+export function debugToken(): void {
+  const token = getAccessToken()
+  if (!token) { console.log('[Auth] No token stored bitch'); return }
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split('.')[1], 'base64').toString('utf8')
+    )
+    const exp     = new Date(payload.exp * 1000)
+    const now     = new Date()
+    const expired = now > exp
+
+    console.log('[Auth] Token payload:', payload)
+    console.log('[Auth] Expires at:', exp.toLocaleString())
+    console.log('[Auth] Current time:', now.toLocaleString())
+    console.log('[Auth] Is expired:', expired)
+  } catch (err) {
+    console.log('[Auth] Failed to decode token:', err)
+  }
+}
 export function saveTokens(tokens: StoredTokens): void {
   if (!safeStorage.isEncryptionAvailable()) {
     console.warn('[Auth] safeStorage unavailable — storing plain text')

@@ -27,7 +27,7 @@ api.interceptors.response.use(
     original._retry = true
 
     try {
-      const refreshResult = await api.post('/auth/refresh')
+      //const refreshResult = await api.post('/auth/refresh')
       return api(original)
 
     } catch (refreshError) {

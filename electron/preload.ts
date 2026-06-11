@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
       return () => ipcRenderer.removeAllListeners('sync:status')
     },
   },
+
+  checkInternet: () => ipcRenderer.invoke('checkInternet'),
+  generatePdf: (data:any) => ipcRenderer.invoke('generateQuotationPdf', data),
    auth: {
     login:    (email: string, password: string) => ipcRenderer.invoke('auth:login', email, password),
     logout:   ()                                => ipcRenderer.invoke('auth:logout'),
@@ -147,6 +150,8 @@ export interface IElectronAPI {
   ping:   () => Promise<string>
   dbTest: () => Promise<{ success: boolean; users?: any[]; error?: string }>
 
+  checkInternet: () => Promise<boolean>
+  generatePdf: (data:any) => Promise<{ success: boolean; filePath?: string; error?: string }>
   clients: {
     getAll:  () => Promise<{ success: boolean; data?: any[]; error?: string }>
     getById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>

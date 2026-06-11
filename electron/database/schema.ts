@@ -7,11 +7,6 @@ export const SCHEMA_VERSION = 1
 
 export const schema = `
 
--- ════════════════════════════════
---  LAYER 1 — FOUNDATION TABLES
---  No foreign keys — nothing depends on these existing first
--- ════════════════════════════════
-
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT     PRIMARY KEY,
   name          TEXT     NOT NULL,
@@ -51,10 +46,6 @@ CREATE TABLE IF NOT EXISTS items (
 );
 
 
--- ════════════════════════════════
---  LAYER 2 — CORE BUSINESS
---  Depends on Layer 1 tables
--- ════════════════════════════════
 
 
 
@@ -81,6 +72,7 @@ CREATE TABLE IF NOT EXISTS quotations (
   status        TEXT     DEFAULT 'draft'
                          CHECK(status IN ('draft','sent','approved','rejected')),
   total_amount  REAL     DEFAULT 0,
+  transport_installation REAL DEFAULT 0,
   valid_until   TEXT,
   notes         TEXT,
   created_at    TEXT     DEFAULT (datetime('now'))
@@ -99,14 +91,8 @@ CREATE TABLE IF NOT EXISTS quotation_items (
 );
 
 
--- ════════════════════════════════
---  LAYER 3 — TRANSACTIONS
---  Depends on Layer 1 + 2 tables
--- ════════════════════════════════
 
--- WHY WORKERS separate from USERS?
--- Not every user is a field worker. An admin manages the app.
--- WORKERS extends a user with field-specific info (daily rate, NIC).
+
 CREATE TABLE IF NOT EXISTS workers (
   id           TEXT     PRIMARY KEY,
   user_id      TEXT     NOT NULL UNIQUE REFERENCES users(id),
@@ -127,14 +113,10 @@ CREATE TABLE IF NOT EXISTS attendance (
   status         TEXT     DEFAULT 'present'
                           CHECK(status IN ('present','absent','half-day')),
   notes          TEXT,
-  -- Prevents logging the same worker on the same project twice on one day
   UNIQUE(worker_id, project_id, work_date)
 );
 
--- WHY store total_amount and daily_rate here?
--- SNAPSHOT PATTERN: once a paysheet is approved, these numbers must
--- be frozen. If the worker's daily_rate changes tomorrow, old
--- paysheets must not change. Store, don't recalculate.
+
 CREATE TABLE IF NOT EXISTS paysheets (
   id            TEXT     PRIMARY KEY,
   worker_id     TEXT     NOT NULL REFERENCES workers(id),
@@ -236,14 +218,9 @@ CREATE TABLE IF NOT EXISTS child_allocations (
   allocated_at              TEXT  DEFAULT (datetime('now'))
 );
 
--- ════════════════════════════════
---  LAYER 4 — SYSTEM TABLES
--- ════════════════════════════════
 
--- OUTBOX PATTERN for offline sync:
--- Every INSERT/UPDATE/DELETE in your app also writes a row here.
--- When internet is back, read WHERE synced=0 and push to cloud.
--- Mark synced=1 after successful upload.
+
+
 CREATE TABLE IF NOT EXISTS sync_log (
   id          TEXT     PRIMARY KEY,
   table_name  TEXT     NOT NULL,
@@ -255,18 +232,14 @@ CREATE TABLE IF NOT EXISTS sync_log (
   created_at  TEXT     DEFAULT (datetime('now'))
 );
 
--- Tracks which schema version this database is on.
--- Used by the migration system to know what to upgrade.
+
 CREATE TABLE IF NOT EXISTS meta (
   key    TEXT  PRIMARY KEY,
   value  TEXT
 );
 
 
--- ════════════════════════════════
---  INDEXES
---  Speed up your most common queries
--- ════════════════════════════════
+
 
 -- "Get all projects for client X"
 CREATE INDEX IF NOT EXISTS idx_projects_client

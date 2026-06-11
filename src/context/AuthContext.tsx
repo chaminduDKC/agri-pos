@@ -1,18 +1,4 @@
-// src/context/AuthContext.tsx
-// ─────────────────────────────────────────────────────────────
-// WHY A CONTEXT?
-//   The current user and logout function are needed in many
-//   places — the sidebar (show username), any page that checks
-//   the user's role, etc.
-//   Context makes it available everywhere without prop drilling.
-//
-// HOW IT WORKS:
-//   On mount → asks main process "are we logged in?"
-//   If yes   → set user, show app
-//   If no    → show Login page
-//   Main process can also push 'auth:sessionExpired' event
-//   which forces back to login from anywhere in the app
-// ─────────────────────────────────────────────────────────────
+
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 

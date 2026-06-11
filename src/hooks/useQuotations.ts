@@ -23,6 +23,7 @@ export interface Quotation {
   total_amount: number
   valid_until: string | null
   notes: string | null
+  transport_installation:number
   created_at: string
 }
 
@@ -35,7 +36,7 @@ export interface QuotationItemInput {
   item_name: string
   quantity: number
   unit_price: number
-  labor_cost?: number
+  
 }
 
 export interface QuotationInput {
@@ -44,6 +45,7 @@ export interface QuotationInput {
   status?: string
   valid_until?: string
   notes?: string
+  transport_installation: number
   items: QuotationItemInput[]
 }
 
@@ -56,6 +58,7 @@ export function useQuotations() {
     setLoading(true); setError(null)
     try {
       const res = await window.api.quotations.getAll()
+      console.log(res.data)
       if (res.success) setQuotations(res.data ?? [])
       else setError(res.error ?? 'Failed to load quotations')
     } catch (err: any) { setError(err.message) }

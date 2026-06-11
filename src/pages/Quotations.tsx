@@ -1,6 +1,8 @@
 // src/pages/Quotations.tsx
 import { useState, useEffect } from 'react'
 import { useQuotations, type Quotation, type QuotationInput, type QuotationItemInput } from '../hooks/useQuotations'
+import { useNavigate } from 'react-router-dom';
+
 
 const STATUSES = ['draft', 'sent', 'approved', 'rejected'] as const
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -10,10 +12,11 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   rejected: { bg: '#fee2e2', color: '#991b1b' },
 }
 
-const emptyItem: QuotationItemInput = { item_name: '', quantity: 1, unit_price: 0, labor_cost: 0 }
-const emptyForm: QuotationInput = { client_id: '', project_id: '', status: 'draft', valid_until: '', notes: '', items: [{ ...emptyItem }] }
+const emptyItem: QuotationItemInput = { item_name: '', quantity: 1, unit_price: 0,  }
+const emptyForm: QuotationInput = { client_id: '', project_id: '', status: 'draft', valid_until: '', notes: '', transport_installation:0, items: [{ ...emptyItem }] }
 
 export default function Quotations() {
+  const navigate = useNavigate()
   const { quotations, loading, error, search, createQuotation, updateQuotation, updateStatus, deleteQuotation } = useQuotations()
 
   const [clients, setClients]   = useState<{ id: string; name: string }[]>([])
@@ -66,17 +69,12 @@ export default function Quotations() {
 
   // ── Totals ─────────────────────────────────────────────────
   const lineTotal = (item: QuotationItemInput) =>
-    (item.quantity * item.unit_price) + (item.labor_cost ?? 0)
+    (item.quantity * item.unit_price) 
 
   const grandTotal = form.items.reduce((sum, item) => sum + lineTotal(item), 0)
-
-  // ── Form open/close ────────────────────────────────────────
-  const openAdd = () => {
-    setEditingId(null)
-    setForm({ ...emptyForm, client_id: clients[0]?.id ?? '', items: [{ ...emptyItem }] })
-    setFormError(null); setShowForm(true)
-  }
-
+  const totalOfLineItems = viewData?.items?.reduce((sum:number, item:any)=>{
+    return sum + (item.unit_price * item.quantity)
+  }, 0)
   const openEdit = async (q: Quotation) => {
     const res = await window.api.quotations.getByIdWithItems(q.id)
     if (!res.success) return
@@ -87,13 +85,13 @@ export default function Quotations() {
       project_id:  data.project_id ?? '',
       status:      data.status,
       valid_until: data.valid_until ?? '',
+      transport_installation:data.transport_installation,
       notes:       data.notes ?? '',
       items: data.items.map((i: any) => ({
         item_id: i.item_id ?? undefined,
         item_name: i.item_name,
         quantity: i.quantity,
         unit_price: i.unit_price,
-        labor_cost: i.labor_cost,
       }))
     })
     setFormError(null); setShowForm(true)
@@ -128,6 +126,11 @@ export default function Quotations() {
   // Filtered projects for the selected client
   const clientProjects = projects.filter(p => p.client_id === form.client_id)
   
+  const generatePDF = async (data:any)=>{
+    await window.api.generatePdf(data);
+  }
+
+
 
   return (
     <div style={s.page}>
@@ -137,7 +140,7 @@ export default function Quotations() {
           <h2 style={s.title}>Quotations</h2>
           <p style={s.sub}>{quotations.length} total</p>
         </div>
-        <button style={s.btnPrimary} onClick={openAdd} disabled={clients.length === 0}>
+        <button style={s.btnPrimary} onClick={()=> navigate('/create-quotation/')} disabled={clients.length === 0}>
           {clients.length === 0 ? 'Add a client first' : '+ New Quotation'}
         </button>
       </div>
@@ -162,7 +165,7 @@ export default function Quotations() {
       {!loading && !error && filtered.length === 0 && (
         <div style={s.empty}>
           <p style={{ marginBottom: 12 }}>No quotations yet.</p>
-          {filter === 'all' && <button style={s.btnPrimary} onClick={openAdd}>Create your first quotation</button>}
+          {filter === 'all' && <button style={s.btnPrimary} onClick={()=> navigate(`/create-quotation/`)}>Create your first quotation</button>}
         </div>
       )}
 
@@ -179,7 +182,7 @@ export default function Quotations() {
                     {q.project_title && <span style={s.projectTag}>{q.project_title}</span>}
                   </div>
                   <p style={s.cardMeta}>
-                    Rs {q.total_amount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    Rs {(q.total_amount + q.transport_installation).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     {q.valid_until && <span style={{ marginLeft:10 }}>· Valid until {q.valid_until}</span>}
                   </p>
                   <p style={s.cardDate}>{new Date(q.created_at).toLocaleDateString()}</p>
@@ -214,17 +217,20 @@ export default function Quotations() {
         <div style={s.overlay} onClick={() => setViewingId(null)}>
           <div style={{ ...s.modal, maxWidth: 620 }} onClick={e => e.stopPropagation()}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-              <h3 style={s.modalTitle}>Quotation</h3>
+              <h3 style={s.modalTitle}>Quotation for  {viewData.project_title}</h3>
               <button style={s.btnSm} onClick={() => setViewingId(null)}>Close</button>
             </div>
-            <p style={{ fontSize:14, marginBottom:4 }}><strong>Client:</strong> {viewData.client_name}</p>
-            {viewData.project_title && <p style={{ fontSize:14, marginBottom:4 }}><strong>Project:</strong> {viewData.project_title}</p>}
-            {viewData.valid_until   && <p style={{ fontSize:14, marginBottom:12 }}><strong>Valid until:</strong> {viewData.valid_until}</p>}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+
+            <p style={{ fontSize:14, color:'#c5c5c5', marginBottom:4 }}><strong>Client:</strong> {viewData.client_name}</p>
+            {viewData.valid_until   && <p style={{ fontSize:14,color:'#c5c5c5', marginBottom:4 }}><strong>Valid until:</strong> {viewData.valid_until}</p>}
+            </div>
+            <h1 style={{ fontSize:24, fontWeight:700, marginBottom:16, textAlign:'center', color:'#409e0a' }}>SOUTHERN GREENHOUSE</h1>
             <table style={{ ...s.table, marginBottom:16 }}>
               <thead>
                 <tr>
-                  {['Item', 'Qty', 'Unit price', 'Labour', 'Line total'].map(h =>
-                    <th key={h} style={s.th}>{h}</th>
+                  {['Item', 'Qty', 'Unit Price (LKR)','Line Total (LKR)'].map(h =>
+                    <th key={h} style={h === "Item" ? {...s.td, textAlign:"left"}  : {...s.td, textAlign:"right"}}>{h}</th>
                   )}
                 </tr>
               </thead>
@@ -232,18 +238,36 @@ export default function Quotations() {
                 {viewData.items.map((item: any) => (
                   <tr key={item.id}>
                     <td style={s.td}>{item.item_name}</td>
-                    <td style={s.td}>{item.quantity}</td>
-                    <td style={s.td}>Rs {item.unit_price.toFixed(2)}</td>
-                    <td style={s.td}>Rs {item.labor_cost.toFixed(2)}</td>
-                    <td style={{ ...s.td, fontWeight:500 }}>Rs {item.line_total.toFixed(2)}</td>
+                    <td style={{...s.td, textAlign:"right"}}>{item.quantity}</td>
+                    <td style={{...s.td, textAlign:"right"}}>{parseFloat(item.unit_price).toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                    <td style={{ ...s.td, fontWeight:500, display:"flex", justifyContent:"flex-end" }}>
+                      
+                    {parseFloat(item.line_total).toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                      </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div style={{ textAlign:'right', fontSize:16, fontWeight:600 }}>
-              Total: Rs {viewData.total_amount.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+            <div style={{display:"flex", flexDirection:"column", alignItems:"flex-end"}}>
+
+            <div style={{...s.td,display:"flex", justifyContent:"space-between", width:"50%",   padding:"0"}}>
+              <span>Total of Items : </span>
+              <span>{parseFloat(totalOfLineItems).toLocaleString()}</span>
+            </div >
+                <div style={{...s.td,display:"flex",width:"50%", justifyContent:"space-between",  padding:"0"}}> 
+                  <span>Transport & Installation : </span>
+                  <span>{parseFloat(viewData.transport_installation).toLocaleString('en-LK', {minimumFractionDigits: 2,maximumFractionDigits: 2,})}</span>
+                  </div>
+            <div style={{ display:"flex",width:"50%", justifyContent:"space-between",  fontSize:16, fontWeight:600, color:'#409e0a',}}>
+              <span>Grand Total : </span>
+              <span> {(viewData.total_amount + viewData.transport_installation).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
             </div>
+            </div>
+
             {viewData.notes && <p style={{ marginTop:12, fontSize:13, color:'#6b7280', fontStyle:'italic' }}>{viewData.notes}</p>}
+          <button style={{ ...s.btnPrimary, display:'block', }} onClick={() => generatePDF(viewData)}>
+            Generate PDF
+          </button>
           </div>
         </div>
       )}
@@ -329,10 +353,7 @@ export default function Quotations() {
                       <input style={{ ...s.input, width:90 }} type="number" value={item.unit_price}
                         onChange={e => updateLine(i, 'unit_price', parseFloat(e.target.value) || 0)} />
                     </td>
-                    <td style={s.td}>
-                      <input style={{ ...s.input, width:90 }} type="number" value={item.labor_cost ?? 0}
-                        onChange={e => updateLine(i, 'labor_cost', parseFloat(e.target.value) || 0)} />
-                    </td>
+
                     <td style={{ ...s.td, fontWeight:500, whiteSpace:'nowrap' }}>
                       Rs {lineTotal(item).toFixed(2)}
                     </td>

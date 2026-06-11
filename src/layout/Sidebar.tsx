@@ -36,11 +36,11 @@ export default function Sidebar() {
 
   useEffect(() => {
     // Get initial status
-    window.api.sync.getStatus().then(res => {
-      setSyncStatus(res.status)
-      setPendingCount(res.pendingCount)
-      setIsOnline(res.isOnline)
-    })
+    // window.api.sync.getStatus().then(res => {
+    //   setSyncStatus(res.status)
+    //   setPendingCount(res.pendingCount)
+    //   setIsOnline(res.isOnline)
+    // })
 
     // Subscribe to live updates from main process
     // Returns an unsubscribe function
@@ -65,6 +65,10 @@ export default function Sidebar() {
     // await window.api.sync.now()
   }
 
+  const checkInternet = async ()=>{
+    const online = await window.api.checkInternet();
+    console.log("Internet status:", online ? "Online" : "Offline");
+  }
   return (
     <aside style={s.sidebar}>
       {/* Brand */}
@@ -87,6 +91,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
+<button onClick={()=> checkInternet()}>Check Internet</button>
       {/* Sync indicator */}
       <div style={s.syncArea} onClick={handleSyncNow} title={isOnline ? 'Click to sync now' : 'No internet connection'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

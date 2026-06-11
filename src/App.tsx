@@ -13,7 +13,8 @@ import Paysheets   from './pages/Paysheets'
 import Invoices    from './pages/Invoices'
 import ProjectDetail from './pages/ProjectDetail'
 
-import { ToastContainer, toast } from 'react-toastify';
+import { ToastContainer } from 'react-toastify';
+import { QuotationForm } from './pages/QuotationForm'
 
 
 // ── Inner app — only renders after auth check ──────────────────
@@ -46,6 +47,7 @@ function AppRoutes() {
           <Route path="/quotations" element={<Quotations />} />
           <Route path="/paysheets"  element={<Paysheets />} />
           <Route path="/invoices"   element={<Invoices />} />
+          <Route path="/create-quotation"   element={<QuotationForm />} />
         </Route>
       </Routes>
      <ToastContainer
