@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { IpcMain, BrowserWindow } from 'electron'
-import { saveTokens, clearTokens, getUser, loadTokens, getRefreshToken } from './tokenStore'
+import { saveTokens, clearTokens,  loadTokens, getRefreshToken } from './tokenStore'
 import { login, logout } from './httpClient'
 
 export function registerAuthHandlers(ipcMain: IpcMain) {
@@ -25,6 +25,8 @@ export function registerAuthHandlers(ipcMain: IpcMain) {
 
       return { success: true, user: data.admin }
     } catch (err: any) {
+      console.log("Not")
+      console.log(err)
       return { success: false, error: err.message }
     }
   })

@@ -8,16 +8,11 @@ const emptyItem: QuotationItemInput = { item_name: '', quantity: 1, unit_price: 
 const emptyForm: QuotationInput = { client_id: '', project_id: '', status: 'draft', valid_until: '', notes: '', transport_installation: 0, items: [{ ...emptyItem }] }
 
 const STATUSES = ['draft', 'sent', 'approved', 'rejected'] as const
-const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-    draft: { bg: '#f3f4f6', color: '#374151' },
-    sent: { bg: '#dbeafe', color: '#1e40af' },
-    approved: { bg: '#dcfce7', color: '#166534' },
-    rejected: { bg: '#fee2e2', color: '#991b1b' },
-}
+
 export const QuotationForm = () => {
     const { createQuotation, updateQuotation, } = useQuotations()
 
-    const [showForm, setShowForm] = useState(false)
+    
 
     const [clients, setClients] = useState<{ id: string; name: string }[]>([])
     const [form, setForm] = useState<QuotationInput>(emptyForm)
@@ -64,7 +59,7 @@ export const QuotationForm = () => {
             )
         }))
     }
-    const closeForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setFormError(null) }
+    const closeForm = () => { setEditingId(null); setForm(emptyForm); setFormError(null) }
 
     const handleSave = async () => {
         if (!form.client_id) { setFormError('Client is required'); return }
@@ -85,13 +80,7 @@ export const QuotationForm = () => {
         (item.quantity * item.unit_price)
     const grandTotal = form.items.reduce((sum, item) => sum + lineTotal(item), 0)
 
-    const fmt = (n: number) =>
-        "LKR " + n.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const fmtDate = (s: string) => {
-        if (!s) return "—";
-        return new Date(s).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    };
 
     return (
         <div style={{ ...s.page, display: 'flex', gap: 40, }}>
@@ -214,7 +203,7 @@ export const QuotationForm = () => {
                     </button>
                 </div>
             </div>
-            <div style={{ marginTop: 20, flex: 2 }}>
+            <div style={{ marginTop: 20, flex: 1 }}>
                 {form.items.length > -1 ? (
                     <div style={{ border: "1px solid whitesmoke", backgroundColor: "whitesmoke", padding: "10px 20px", borderRadius: "10px" }}>
                         <div>

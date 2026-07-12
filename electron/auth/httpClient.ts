@@ -112,8 +112,11 @@ export async function login(email: string, password: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
+  console.log("Hi")
 
   if (!response.ok) {
+    console.log("response")
+    console.log(response)
     const err = await response.json().catch(() => ({})) as any
     throw new Error(err?.message ?? 'Invalid email or password')
   }

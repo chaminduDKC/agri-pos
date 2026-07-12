@@ -123,6 +123,15 @@ export default function Invoices() {
     } else alert(res.error)
   }
 
+  const generateInvoiceData = async (invoice:Invoice)=>{
+    // fetch project details by invoice,project_id
+    try {
+      
+      const res = await window.api.generateInvoicePdf(invoice)
+    } catch (error) {
+      
+    }
+  }
   if (loading) return <p style={{ padding: 32, color: '#888' }}>Loading...</p>
 
   return (
@@ -171,7 +180,7 @@ export default function Invoices() {
           <div style={s.tableWrap}>
             <table style={s.table}>
               <thead>
-                <tr>{['Client','Project','Amount due','Paid','Remaining','Status','Due date',''].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                <tr>{['Client','Project','Amount due','Paid','Remaining','Status','Due date','', "PDF"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {filtered.map(inv => {
@@ -214,6 +223,7 @@ export default function Invoices() {
                           <button style={s.btnSm} onClick={() => handleDelete(inv.id)}>Delete</button>
                         </div>
                       </td>
+                      <td style={s.td}><button onClick={()=> generateInvoiceData(inv)}>Generate PDF</button></td>
                     </tr>
                   )
                 })}
@@ -293,7 +303,7 @@ export default function Invoices() {
   )
 }
 const s: Record<string, React.CSSProperties> = {
-  page: { margin: '0 auto', maxWidth: 1200 },
+  page: { margin: '0 auto', },
 
   header: {
     display: 'flex',

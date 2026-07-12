@@ -1,12 +1,3 @@
-// electron/auth/tokenStore.ts
-// ─────────────────────────────────────────────────────────────
-// WHY safeStorage?
-//   Tokens stored in plain files can be read by anyone with
-//   access to the machine. safeStorage encrypts using the OS
-//   keychain (Windows DPAPI, macOS Keychain, Linux libsecret).
-//   Only your app can decrypt it.
-// ─────────────────────────────────────────────────────────────
-
 import { safeStorage, app } from 'electron'
 import path from 'path'
 import fs from 'fs'

@@ -53,59 +53,42 @@ export class ClientsRepository {
     this.db = db
   }
 
-  // ── GET ALL ───────────────────────────────────────────────
-  // Returns all clients, newest first.
-  // WHY ORDER BY created_at DESC?
-  //   Most recently added clients appear at the top — more useful
-  //   than alphabetical when you're actively adding new clients.
   getAll(): Client[] {
     return this.db
       .prepare(`
         SELECT id, name, phone, email, address, notes, created_at
-        FROM clients
+        FROM clients WHERE is_deleted = 0
         ORDER BY created_at DESC
       `)
       .all() as Client[]
   }
 
-  // ── GET BY ID ─────────────────────────────────────────────
-  // Returns one client or undefined if not found.
-  // Used when opening a client's detail page.
   getById(id: string): Client | undefined {
     return this.db
       .prepare(`
         SELECT id, name, phone, email, address, notes, created_at
         FROM clients
-        WHERE id = ?
+        WHERE id = ? AND is_deleted = 0
       `)
       .get(id) as Client | undefined
   }
 
-  // ── SEARCH ────────────────────────────────────────────────
-  // Simple name/phone/email search using SQL LIKE.
-  // The '%' wildcard means "anything before or after the search term".
-  // e.g. searching "silva" matches "John Silva", "Silva Homes", etc.
-  search(query: string): Client[] {
+
+search(query: string): Client[] {
     const term = `%${query}%`
     return this.db
       .prepare(`
         SELECT id, name, phone, email, address, notes, created_at
         FROM clients
-        WHERE name    LIKE ?
-           OR phone   LIKE ?
-           OR email   LIKE ?
+        WHERE (name  LIKE ?
+           OR phone LIKE ?
+           OR email LIKE ?)
+          AND is_deleted = 0
         ORDER BY name ASC
       `)
       .all(term, term, term) as Client[]
   }
 
-  // ── CREATE ────────────────────────────────────────────────
-  // Inserts a new client and returns the complete created record.
-  //
-  // WHY return the full record after insert?
-  //   The UI needs the id and created_at that were generated
-  //   server-side. Returning the full record means the UI can
-  //   immediately add it to the list without a second fetch.
   create(input: ClientInput): Client {
     const id = randomUUID()
 
@@ -127,11 +110,7 @@ export class ClientsRepository {
     return this.getById(id)!
   }
 
-  // ── UPDATE ────────────────────────────────────────────────
-  // Updates only the fields that can be changed.
-  // Note: id and created_at are never updated.
-  //
-  // Returns the updated record so the UI can refresh in place.
+
   update(id: string, input: ClientInput): Client | undefined {
     this.db
       .prepare(`
@@ -140,8 +119,9 @@ export class ClientsRepository {
             phone   = ?,
             email   = ?,
             address = ?,
-            notes   = ?
-        WHERE id = ?
+            notes   = ?,
+            is_synced = 0
+        WHERE id = ? AND is_deleted = 0
       `)
       .run(
         input.name,
@@ -155,32 +135,16 @@ export class ClientsRepository {
     return this.getById(id)
   }
 
-  // ── DELETE ────────────────────────────────────────────────
-  // Deletes a client by id.
-  //
-  // WHY check changes?
-  //   stmt.run() returns info including 'changes' — the number of
-  //   rows affected. If changes = 0, the id didn't exist.
-  //   We return a success flag so the UI can handle "not found".
-  //
-  // NOTE: If this client has projects linked to them, SQLite will
-  // throw a FOREIGN KEY constraint error. The UI should warn the
-  // user before deleting a client that has projects.
+
   delete(id: string): { success: boolean } {
     const result = this.db
-      .prepare(`DELETE FROM clients WHERE id = ?`)
+      .prepare(`UPDATE clients SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`)
       .run(id)
 
     return { success: result.changes > 0 }
   }
 
-  // ── GET WITH STATS ────────────────────────────────────────
-  // Returns clients with extra counts — useful for the list view
-  // to show "3 projects" next to each client without a separate call.
-  //
-  // This uses a SQL JOIN + COUNT — your first multi-table query!
-  // LEFT JOIN means: include clients even if they have 0 projects.
-  getAllWithStats(): (Client & { project_count: number })[] {
+getAllWithStats(): (Client & { project_count: number })[] {
     return this.db
       .prepare(`
         SELECT
@@ -193,7 +157,8 @@ export class ClientsRepository {
           c.created_at,
           COUNT(p.id) AS project_count
         FROM clients c
-        LEFT JOIN projects p ON p.client_id = c.id
+        LEFT JOIN projects p ON p.client_id = c.id AND p.is_deleted = 0
+        WHERE c.is_deleted = 0
         GROUP BY c.id
         ORDER BY c.created_at DESC
       `)

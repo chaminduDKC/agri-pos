@@ -1,4 +1,3 @@
-// src/layout/Sidebar.tsx
 import { NavLink } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
@@ -11,6 +10,8 @@ const NAV_ITEMS = [
   { path: '/quotations', label: 'Quotations', icon: '📋' },
   { path: '/paysheets',  label: 'Pay Sheets', icon: '💰' },
   { path: '/invoices',   label: 'Invoices',   icon: '🧾' },
+  { path: '/ledger',   label: 'Ledger',   icon: '🧾' },
+  { path: '/settings',   label: 'Settings',   icon: '🧾' },
 ]
 
 const SYNC_COLORS: Record<string, string> = {
@@ -35,15 +36,7 @@ export default function Sidebar() {
   const [loggingOut, setLoggingOut]     = useState(false)
 
   useEffect(() => {
-    // Get initial status
-    // window.api.sync.getStatus().then(res => {
-    //   setSyncStatus(res.status)
-    //   setPendingCount(res.pendingCount)
-    //   setIsOnline(res.isOnline)
-    // })
-
-    // Subscribe to live updates from main process
-    // Returns an unsubscribe function
+   
     const unsub = window.api.sync.onStatus(({ status, pendingCount }) => {
       setSyncStatus(status)
       setPendingCount(pendingCount)
@@ -65,10 +58,6 @@ export default function Sidebar() {
     // await window.api.sync.now()
   }
 
-  const checkInternet = async ()=>{
-    const online = await window.api.checkInternet();
-    console.log("Internet status:", online ? "Online" : "Offline");
-  }
   return (
     <aside style={s.sidebar}>
       {/* Brand */}
@@ -91,7 +80,7 @@ export default function Sidebar() {
         ))}
       </nav>
 
-<button onClick={()=> checkInternet()}>Check Internet</button>
+
       {/* Sync indicator */}
       <div style={s.syncArea} onClick={handleSyncNow} title={isOnline ? 'Click to sync now' : 'No internet connection'}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

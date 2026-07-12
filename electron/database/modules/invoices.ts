@@ -36,8 +36,7 @@ export class InvoicesRepository {
     this.db = db
   }
 
-  // ── GET ALL ───────────────────────────────────────────────
-  getAll(): Invoice[] {
+getAll(): Invoice[] {
     return this.db.prepare(`
       SELECT
         i.*,
@@ -47,11 +46,14 @@ export class InvoicesRepository {
       FROM invoices i
       JOIN projects p ON p.id = i.project_id
       JOIN clients  c ON c.id = i.client_id
+      WHERE i.is_deleted = 0
+        AND p.is_deleted = 0
+        AND c.is_deleted = 0
       ORDER BY i.created_at DESC
     `).all() as Invoice[]
   }
 
-  getById(id: string): Invoice | undefined {
+getById(id: string): Invoice | undefined {
     return this.db.prepare(`
       SELECT
         i.*,
@@ -62,6 +64,9 @@ export class InvoicesRepository {
       JOIN projects p ON p.id = i.project_id
       JOIN clients  c ON c.id = i.client_id
       WHERE i.id = ?
+        AND i.is_deleted = 0
+        AND p.is_deleted = 0
+        AND c.is_deleted = 0
     `).get(id) as Invoice | undefined
   }
 
@@ -75,17 +80,17 @@ export class InvoicesRepository {
       FROM invoices i
       JOIN projects p ON p.id = i.project_id
       JOIN clients  c ON c.id = i.client_id
-      WHERE i.client_id = ?
+      WHERE i.client_id = ? AND i.is_deleted = 0
+      AND p.is_deleted = 0
+      AND c.is_deleted = 0
       ORDER BY i.created_at DESC
     `).all(clientId) as Invoice[]
   }
 
-  // ── CREATE ────────────────────────────────────────────────
   create(input: InvoiceInput): Invoice {
     const id          = randomUUID()
     const amount_paid = input.amount_paid ?? 0
 
-    // Derive payment status automatically from amounts
     const payment_status = deriveStatus(input.amount_due, amount_paid)
 
     this.db.prepare(`
@@ -107,11 +112,7 @@ export class InvoicesRepository {
     return this.getById(id)!
   }
 
-  // ── RECORD PAYMENT ────────────────────────────────────────
-  // WHY a separate method for payments?
-  //   Recording a payment only changes amount_paid.
-  //   The status is then derived automatically — no manual
-  //   status selection needed. Less chance of human error.
+
   recordPayment(id: string, additionalAmount: number): Invoice | undefined {
     const invoice = this.getById(id)
     if (!invoice) return undefined
@@ -122,14 +123,14 @@ export class InvoicesRepository {
     this.db.prepare(`
       UPDATE invoices
       SET amount_paid    = ?,
-          payment_status = ?
-      WHERE id = ?
+          payment_status = ?,
+          is_synced = 0
+      WHERE id = ? AND is_deleted = 0
     `).run(newPaid, newStatus, id)
 
     return this.getById(id)
   }
 
-  // ── UPDATE ────────────────────────────────────────────────
   update(id: string, input: Partial<InvoiceInput>): Invoice | undefined {
     const invoice = this.getById(id)
     if (!invoice) return undefined
@@ -145,8 +146,9 @@ export class InvoicesRepository {
         amount_paid    = ?,
         payment_status = ?,
         due_date       = ?,
-        notes          = ?
-      WHERE id = ?
+        notes          = ?,
+        is_synced = 0
+      WHERE id = ? AND is_deleted = 0
     `).run(
       input.quotation_id ?? null,
       amount_due,
@@ -161,12 +163,11 @@ export class InvoicesRepository {
   }
 
   delete(id: string): { success: boolean } {
-    const result = this.db.prepare(`DELETE FROM invoices WHERE id = ?`).run(id)
+    const result = this.db.prepare(`UPDATE invoices SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(id)
     return { success: result.changes > 0 }
   }
 
-  // ── OUTSTANDING SUMMARY ───────────────────────────────────
-  // For the dashboard — total amount outstanding across all invoices
+
   getOutstandingSummary(): { total_due: number; total_paid: number; total_remaining: number } {
     const row = this.db.prepare(`
       SELECT
@@ -174,7 +175,7 @@ export class InvoicesRepository {
         SUM(amount_paid) AS total_paid,
         SUM(amount_due - amount_paid) AS total_remaining
       FROM invoices
-      WHERE payment_status != 'paid'
+      WHERE payment_status != 'paid' AND is_deleted = 0
     `).get() as any
 
     return {
@@ -185,9 +186,7 @@ export class InvoicesRepository {
   }
 }
 
-// ── Helper ────────────────────────────────────────────────────
-// Derives payment status from amounts so it's always consistent.
-// Called on create, update, and recordPayment.
+
 function deriveStatus(due: number, paid: number): string {
   if (paid <= 0)    return 'pending'
   if (paid >= due)  return 'paid'

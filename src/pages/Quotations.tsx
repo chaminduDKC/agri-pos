@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useQuotations, type Quotation, type QuotationInput, type QuotationItemInput } from '../hooks/useQuotations'
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 
 const STATUSES = ['draft', 'sent', 'approved', 'rejected'] as const
@@ -71,13 +72,13 @@ export default function Quotations() {
   const lineTotal = (item: QuotationItemInput) =>
     (item.quantity * item.unit_price) 
 
-  const grandTotal = form.items.reduce((sum, item) => sum + lineTotal(item), 0)
+  const grandTotal = form.items.reduce((sum, item) => sum + lineTotal(item), 0) + form.transport_installation
   const totalOfLineItems = viewData?.items?.reduce((sum:number, item:any)=>{
     return sum + (item.unit_price * item.quantity)
   }, 0)
   const openEdit = async (q: Quotation) => {
     const res = await window.api.quotations.getByIdWithItems(q.id)
-    if (!res.success) return
+    if (!res.success) {toast.error("Something went wrong. Try again"); return}
     const data = res.data
     setEditingId(q.id)
     setForm({
@@ -317,6 +318,15 @@ export default function Quotations() {
               </div>
             </div>
 
+            <div style={s.grid2}>
+              
+              <div>
+                <label style={s.label}>Transport & Installation</label>
+                <input style={s.input} type="number" value={form.transport_installation ?? ''}
+                  onChange={e => setForm(f => ({ ...f, transport_installation: Number(e.target.value) }))} />
+              </div>
+            </div>
+
             {/* Line items */}
             <div style={{ marginTop:20, marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <label style={{ ...s.label, marginTop:0 }}>Line items *</label>
@@ -326,7 +336,7 @@ export default function Quotations() {
             <table style={s.table}>
               <thead>
                 <tr>
-                  {['Item', 'Qty', 'Unit price', 'Labour', 'Total', ''].map(h =>
+                  {['Item', 'Qty', 'Unit price', 'Total', ''].map(h =>
                     <th key={h} style={s.th}>{h}</th>
                   )}
                 </tr>
@@ -346,7 +356,7 @@ export default function Quotations() {
                         onChange={e => updateLine(i, 'item_name', e.target.value)} />
                     </td>
                     <td style={s.td}>
-                      <input style={{ ...s.input, width:60 }} type="number" value={item.quantity}
+                      <input style={{ ...s.input, width:90 }} type="number" value={item.quantity}
                         onChange={e => updateLine(i, 'quantity', parseFloat(e.target.value) || 0)} />
                     </td>
                     <td style={s.td}>
@@ -355,7 +365,7 @@ export default function Quotations() {
                     </td>
 
                     <td style={{ ...s.td, fontWeight:500, whiteSpace:'nowrap' }}>
-                      Rs {lineTotal(item).toFixed(2)}
+                      Rs {lineTotal(item).toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}
                     </td>
                     <td style={s.td}>
                       {form.items.length > 1 &&
@@ -367,7 +377,7 @@ export default function Quotations() {
               </tbody>
             </table>
 
-            <div style={{ textAlign:'right', fontSize:15, fontWeight:600, marginTop:12 }}>
+            <div style={{ textAlign:'right', color:"#22c55e", fontSize:15, fontWeight:600, marginTop:12 }}>
               Total: Rs {grandTotal.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
             </div>
 

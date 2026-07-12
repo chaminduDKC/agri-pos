@@ -9,6 +9,8 @@ export interface Worker {
   user_name: string   // joined from users
   nic: string | null
   daily_rate: number
+  fixed_salary:number
+  overtime_rate:number
   phone: string | null
   address: string | null
   joined_date: string | null
@@ -18,6 +20,8 @@ export interface WorkerInput {
   name: string        // creates a user entry too
   nic?: string
   daily_rate: number
+  fixed_salary:number,
+  overtime_rate:number,
   phone?: string
   address?: string
   joined_date?: string
@@ -95,13 +99,15 @@ export class WorkersRepository {
 
       // Then create the worker profile
       this.db.prepare(`
-        INSERT INTO workers (id, user_id, nic, daily_rate, phone, address, joined_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO workers (id, user_id, nic, daily_rate, fixed_salary, overtime_rate, phone, address, joined_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         workerId,
         userId,
         input.nic         ?? null,
         input.daily_rate,
+        input.fixed_salary ?? 0,
+        input.overtime_rate ?? 0,
         input.phone       ?? null,
         input.address     ?? null,
         input.joined_date ?? null,
@@ -125,6 +131,7 @@ export class WorkersRepository {
         UPDATE workers SET
           nic         = COALESCE(?, nic),
           daily_rate  = COALESCE(?, daily_rate),
+          fixed_salary = ?,
           phone       = ?,
           address     = ?,
           joined_date = ?
@@ -132,6 +139,7 @@ export class WorkersRepository {
       `).run(
         input.nic         ?? null,
         input.daily_rate  ?? null,
+        input.fixed_salary ?? 0,
         input.phone       ?? null,
         input.address     ?? null,
         input.joined_date ?? null,
@@ -169,7 +177,7 @@ export class AttendanceRepository {
       JOIN workers  w ON w.id = a.worker_id
       JOIN users    u ON u.id = w.user_id
       JOIN projects p ON p.id = a.project_id
-      WHERE a.project_id = ?
+      WHERE a.project_id = ? AND a.is_deleted = 0 AND w.is_deleted = 0 AND u.is_deleted = 0 AND p.is_deleted = 0
       ORDER BY a.work_date DESC
     `).all(projectId) as AttendanceRecord[]
   }
@@ -177,6 +185,8 @@ export class AttendanceRepository {
   // ── GET FOR WORKER IN DATE RANGE ──────────────────────────
   // Used to calculate what goes into a paysheet.
   getByWorkerAndPeriod(workerId: string, from: string, to: string): AttendanceRecord[] {
+    console.log("workerId, from, to")
+    console.log(workerId, from, to)
     return this.db.prepare(`
       SELECT
         a.*,
@@ -189,6 +199,7 @@ export class AttendanceRepository {
       WHERE a.worker_id = ?
         AND a.work_date >= ?
         AND a.work_date <= ?
+         AND a.is_deleted = 0 AND w.is_deleted = 0 AND u.is_deleted = 0 AND p.is_deleted = 0
       ORDER BY a.work_date ASC
     `).all(workerId, from, to) as AttendanceRecord[]
   }
@@ -219,6 +230,7 @@ export class AttendanceRepository {
       WHERE worker_id = ?
         AND work_date >= ?
         AND work_date <= ?
+        AND is_deleted = 0
     `).get(workerId, from, to) as any
 
     return {
@@ -233,17 +245,54 @@ export class AttendanceRepository {
   // ── MARK ATTENDANCE ───────────────────────────────────────
   // INSERT OR REPLACE handles the UNIQUE(worker, project, date)
   // constraint — if a record exists for that day, it updates it.
+  // mark(input: AttendanceInput): AttendanceRecord {
+  //   const id = randomUUID()
+  //   this.db.prepare(`
+  //     INSERT INTO attendance (id, worker_id, project_id, work_date, hours_worked, overtime_hours, status, notes)
+  //     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  //     ON CONFLICT(worker_id, project_id, work_date)
+  //     DO UPDATE SET
+  //       hours_worked   = excluded.hours_worked,
+  //       overtime_hours = excluded.overtime_hours,
+  //       status         = excluded.status,
+  //       notes          = excluded.notes,
+  //       is_synced      = 0,
+  //       is_deleted     = 0
+  //   `).run(
+  //     id,
+  //     input.worker_id,
+  //     input.project_id,
+  //     input.work_date,
+  //     input.hours_worked    ?? 8,
+  //     input.overtime_hours  ?? 0,
+  //     input.status          ?? 'present',
+  //     input.notes           ?? null,
+  //   )
+
+  //   // Fetch back the actual saved record (id may differ if it was an update)
+  //   return this.db.prepare(`
+  //     SELECT a.*, u.name AS worker_name, p.title AS project_title
+  //     FROM attendance a
+  //     JOIN workers  w ON w.id = a.worker_id
+  //     JOIN users    u ON u.id = w.user_id
+  //     JOIN projects p ON p.id = a.project_id
+  //     WHERE a.worker_id = ? AND a.project_id = ? AND a.work_date = ? AND a.is_deleted = 0 AND w.is_deleted = 0 AND u.is_deleted = 0 AND p.is_deleted = 0
+  //   `).get(input.worker_id, input.project_id, input.work_date) as AttendanceRecord
+  // }
+
   mark(input: AttendanceInput): AttendanceRecord {
     const id = randomUUID()
     this.db.prepare(`
-      INSERT INTO attendance (id, worker_id, project_id, work_date, hours_worked, overtime_hours, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO attendance (id, worker_id, project_id, work_date, hours_worked, overtime_hours, status, notes, is_synced, is_deleted)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
       ON CONFLICT(worker_id, project_id, work_date)
       DO UPDATE SET
         hours_worked   = excluded.hours_worked,
         overtime_hours = excluded.overtime_hours,
         status         = excluded.status,
-        notes          = excluded.notes
+        notes          = excluded.notes,
+        is_synced      = 0,
+        is_deleted     = 0
     `).run(
       id,
       input.worker_id,
@@ -262,12 +311,11 @@ export class AttendanceRepository {
       JOIN workers  w ON w.id = a.worker_id
       JOIN users    u ON u.id = w.user_id
       JOIN projects p ON p.id = a.project_id
-      WHERE a.worker_id = ? AND a.project_id = ? AND a.work_date = ?
+      WHERE a.worker_id = ? AND a.project_id = ? AND a.work_date = ? AND a.is_deleted = 0 AND w.is_deleted = 0 AND u.is_deleted = 0 AND p.is_deleted = 0
     `).get(input.worker_id, input.project_id, input.work_date) as AttendanceRecord
   }
-
   delete(id: string): { success: boolean } {
-    const result = this.db.prepare(`DELETE FROM attendance WHERE id = ?`).run(id)
+    const result = this.db.prepare(`UPDATE attendance SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(id)
     return { success: result.changes > 0 }
   }
 }

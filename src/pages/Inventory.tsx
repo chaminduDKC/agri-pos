@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useItems, type Item, type ItemInput } from '../hooks/useItems'
 import ComboBox from '../components/ComboBox';
+import { toast } from 'react-toastify';
 
 
 const UNITS = ['units', 'meters', 'kg', 'liters', 'rolls', 'boxes', 'bags', 'pairs']
@@ -32,7 +33,7 @@ export default function Inventory() {
 
   const openEdit = (item: Item) => {
     setEditingId(item.id)
-    setForm({ name: item.name, category: item.category ?? '', source: item.source ?? '', unit: item.unit, quantity: item.quantity, low_stock_threshold: item.low_stock_threshold, barcode: item.barcode ?? '', supplier: item.supplier ?? '', unit_price: item.unit_price })
+    setForm({ name: item.name, category: item.category ?? '', source: item.source ?? '', unit: item.unit, quantity: item.quantity, low_stock_threshold: item.low_stock_threshold, barcode: item.barcode ?? '', supplier: item.supplier ?? '', unit_size: item.unit_size ?? '', unit_price: item.unit_price })
     setFormError(null); setShowForm(true)
   }
   const closeForm = () => { setShowForm(false); setSku(''); setEditingId(null); setForm(emptyForm); setFormError(null) }
@@ -43,6 +44,7 @@ export default function Inventory() {
     if (!form.name.trim()) { setFormError('Item name is required'); return }
     if (!form.unit.trim()) { setFormError('Unit is required'); return }
     setSaving(true)
+    console.log(form.unit_size)
     const err = editingId ? await updateItem(editingId, form) : await createItem(form)
     setSaving(false)
     if (err) { setFormError(err) } else { closeForm() }
@@ -52,6 +54,7 @@ export default function Inventory() {
     const qty = parseFloat(newQty)
     if (isNaN(qty) || qty < 0) return
     await setQuantity(id, qty)
+    toast.success("Quantity changed successfully")
     setAdjustingId(null); setNewQty('')
   }
 
@@ -75,10 +78,10 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
 };
 
 
-  const field = (key: keyof ItemInput, label: string, type = 'text', opts?: any) => (
+  const field = (key: keyof ItemInput, autoFocus:Boolean, label: string, type = 'text', opts?: any) => (
     <div key={key}>
       <label style={s.label}>{label}</label>
-      <input style={s.input} type={type} value={String(form[key] ?? '')}
+      <input autoFocus={autoFocus} style={s.input} type={type} value={String(form[key] ?? '')}
         onChange={e => {
           setForm(f => ({ ...f, [key]: type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value }));
           if(key === 'name' || key === 'category' || key === 'unit_size'){
@@ -112,7 +115,7 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
         <div style={s.filters}>
           {['all', 'low', ...categories].map(cat => (
             <button key={cat} style={{ ...s.filterBtn, ...(filter === cat ? s.filterActive : {}) }} onClick={() => setFilter(cat)}>
-              {cat === 'all' ? 'All' : cat === 'low' ? `⚠ Low stock (${lowStockIds.size})` : cat}
+              {cat === 'all' ? 'All' : cat === 'low' ? `⚠ Low stock (${lowStockIds.size})` : cat === "" ? "Uncategorized" : cat}
             </button>
           ))}
         </div>
@@ -128,21 +131,23 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
       )}
 
       {/* Table */}
+      <div style={s.listWrapper}>
       {filtered.length > 0 && (
         <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
+          <table style={{...s.table, position:"relative"}}>
+            <thead style={{position:"sticky"}}>
               <tr>
                 {['Name', 'Category', 'Unit', 'Quantity', 'Low stock at', 'Unit price', 'Unit size', 'SKU', ''].map(h => (
                   <th key={h} style={s.th}>{h}</th>
                 ))}
               </tr>
             </thead>
+
             <tbody>
               {filtered.map(item => {
                 const isLow = lowStockIds.has(item.id)
                 return (
-                  <tr key={item.id} style={isLow ? { background: '#fef2f2' } : {}}>
+                  <tr key={item.id} style={isLow ? { background: '#f82500' } : {}}>
                     <td style={s.td}>
                       <span style={{ fontWeight: 500 }}>{item.name}</span>
                       {item.supplier && <span style={{ display:'block', fontSize:11, color:'#9ca3af' }}>{item.supplier}</span>}
@@ -151,8 +156,8 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
                     <td style={s.td}>{item.unit}</td>
                     <td style={s.td}>
                       {adjustingId === item.id ? (
-                        <span style={{ display:'flex', gap:4, alignItems:'center' }}>
-                          <input style={{ ...s.input, width:70, padding:'4px 8px' }} type="number" value={newQty}
+                        <span style={{ display:'flex',color:"#d1d5db", gap:4, alignItems:'center' }}>
+                          <input style={{ ...s.input, color:"#d1d5db", width:70, padding:'4px 8px' }} type="number" value={newQty}
                             onChange={e => setNewQty(e.target.value)} autoFocus
                             onKeyDown={e => { if (e.key === 'Enter') handleSetQty(item.id); if (e.key === 'Escape') setAdjustingId(null) }} />
                           <button style={s.btnSm} onClick={() => handleSetQty(item.id)}>Set</button>
@@ -160,10 +165,10 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
                         </span>
                       ) : (
                         <span style={{ display:'flex', gap:6, alignItems:'center' }}>
-                          <span style={{ color: isLow ? '#dc2626' : undefined, fontWeight: isLow ? 600 : 400 }}>
+                          <span style={{ color: isLow ? 'color:"#d1d5db",' : undefined, fontWeight: isLow ? 600 : 400 }}>
                             {item.quantity}
                           </span>
-                          {isLow && <span style={s.lowBadge}>Low</span>}
+                          {isLow && <span style={{...s.lowBadge, color:"#ffffff",}}>Low</span>}
                           <button style={{ ...s.btnSm, fontSize:11, padding:'2px 7px' }}
                             onClick={() => { setAdjustingId(item.id); setNewQty(String(item.quantity)) }}>
                             Adjust
@@ -195,6 +200,8 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
           </table>
         </div>
       )}
+      </div>
+      
 
       {/* Modal */}
       {showForm && (
@@ -209,7 +216,7 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
 
       {/* Row 1: Name + Category */}
       <div style={s.grid2}>
-        {field('name', 'Name *')}
+        {field('name', true, 'Name *')}
         <div>
           <label style={s.label}>Category</label>
           <ComboBox
@@ -246,13 +253,13 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
 
       {/* Row 3: Unit price + Quantity */}
       <div style={s.grid2}>
-        {field('unit_price', 'Unit price (Rs)', 'number')}
-        {field('quantity', 'Initial quantity', 'number')}
+        {field('unit_price', false, 'Unit price (Rs)', 'number')}
+        {field('quantity',false, 'Initial quantity', 'number')}
       </div>
 
       {/* Row 4: Alert threshold + SKU */}
       <div style={s.grid2}>
-        {field('low_stock_threshold', 'Alert when below', 'number')}
+        {field('low_stock_threshold', false, 'Alert when below', 'number')}
         <div style={{
           width: '100%', marginTop: 32, padding: '6px 12px', fontSize: 14,
           border: '1px solid #e5e7eb', borderRadius: 6, boxSizing: 'border-box'
@@ -265,7 +272,7 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
 
       {/* Row 5: Supplier */}
       <div style={s.grid2}>
-        {field('supplier', 'Supplier')}
+        {field('supplier', false,'Supplier')}
       </div>
 
       <div style={s.modalActions}>
@@ -281,7 +288,10 @@ const handleCreateSku = (cat: string, name: string, unit_size: string | undefine
 }
 const s: Record<string, React.CSSProperties> = {
   page: { margin: '0 auto' },
-
+listWrapper:{
+     overflowY: 'auto',
+  height: 'calc(100vh - 180px)',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',

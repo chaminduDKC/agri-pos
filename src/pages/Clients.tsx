@@ -1,4 +1,3 @@
-// src/pages/Clients.tsx
 import { useState } from 'react'
 import { useClients, type Client, type ClientInput } from '../hooks/useClients'
 
@@ -26,9 +25,21 @@ export default function Clients() {
   const handleSave = async () => {
     if (!form.name.trim()) { setFormError('Client name is required'); return }
     setSaving(true)
-    const err = editingId ? await updateClient(editingId, form) : await createClient(form)
-    setSaving(false)
-    if (err) { setFormError(err) } else { closeForm() }
+    const res = editingId ? await updateClient(editingId, form) : await createClient(form)
+    if (typeof res === 'string') {
+      setFormError(res)
+      return
+    }
+
+    if (res.sucess) {
+      setShowForm(false)
+      setSaving(false)
+      setEditingId(null)
+      setForm(emptyForm)
+      setFormError(null)
+    } else {
+    }
+
   }
 
   const startDelete = (id: string) => {
@@ -39,8 +50,8 @@ export default function Clients() {
   const handleDelete = async (id: string) => {
     const err = await deleteClient(id)
     if (err) {
-      // Show error inline instead of alert()
-      setDeleteError(err)
+      setDeletingId(null)
+      setDeleteError(null)
     } else {
       setDeletingId(null)
       setDeleteError(null)
@@ -68,17 +79,20 @@ export default function Clients() {
           <button style={s.btnPrimary} onClick={openAdd}>Add your first client</button>
         </div>
       )}
+      <div style={s.listWrapper}>
 
+      
       <div style={s.list}>
         {clients.map(client => (
           <div key={client.id} style={s.card}>
             <div style={s.cardLeft}>
               <div style={s.avatar}>{client.name.charAt(0).toUpperCase()}</div>
               <div>
-                <p style={s.name}>{client.name}</p>
-                <p style={s.meta}>{[client.phone].filter(Boolean).join(' · ') || 'No contact info'}</p>
-                <p style={s.meta}>{client.email || 'No email provided'}</p>
-                {client.address && <p style={s.meta}>{client.address}</p>}
+                
+                {client.name ? <p style={s.name}> {client.name.length > 20 ? `${client.name.substring(0,20)}...` : client.name }</p> : <p style={s.meta}>Unknown Client</p>}
+                {client.phone ? <p style={s.meta}> {client.phone.length > 30 ? `${client.phone.substring(0,30)}...` : client.phone }</p> : <p style={s.meta}>Phone No Unavailable</p>}
+                {client.email ? <p style={s.meta}> {client.email.length > 30 ? `${client.email.substring(0,30)}...` : client.email }</p> : <p style={s.meta}>Email Unavailable</p>}
+                {client.address ? <p style={s.meta}>{client.address.length > 30 ? `${client.email?.substring(0,30)}...` : client.address}</p> : <p style={s.meta}>Address Unavailable</p>}
               </div>
             </div>
             <div style={s.cardRight}>
@@ -108,7 +122,7 @@ export default function Clients() {
           </div>
         ))}
       </div>
-
+</div>
       {showForm && (
         <div style={s.overlay}>
           <div style={s.modal} onClick={e => e.stopPropagation()}>
@@ -133,8 +147,11 @@ export default function Clients() {
   )
 }
 const s: Record<string, React.CSSProperties> = {
-  page: { margin: '0 auto' },
-
+  page: { margin: '0 auto', height:"100%" },
+  listWrapper:{
+     overflowY: 'auto',
+  height: 'calc(100vh - 180px)',
+  },
   header: {
     display: 'flex',
     justifyContent: 'space-between',

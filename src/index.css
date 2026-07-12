@@ -65,3 +65,25 @@
   --danger-bg: #fee2e2;
   --warning-bg: #fef3c7; */
 }
+
+/* Webkit (Chrome, Edge, Electron) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px; /* for horizontal scrollbars */
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #374151;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4b5563; /* slightly lighter on hover */
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #374151 transparent;
+}

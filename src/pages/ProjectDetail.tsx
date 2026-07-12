@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
 
+
+
 interface Project {
   id: string; title: string; client_name: string
   status: string; location: string | null; notes: string | null
@@ -9,6 +11,7 @@ interface Project {
 
 interface SubProject {
   id: string; project_id: string; parent_id: string | null
+  contract_value: number | 0; location: string | null
   title: string; status: string; notes: string | null; level: number
 }
 
@@ -20,6 +23,7 @@ interface Allocation {
   quantity_returned: number; quantity_remaining: number
   quantity_assigned: number
   quantity_received_back: number
+  allocated_at: string
   created_at: string
 }
 
@@ -53,26 +57,28 @@ const s: Record<string, React.CSSProperties> = {
   headerInfo: { flex: 1 },
   headerTitle: { margin: 0, fontSize: 17, fontWeight: 700, color: '#e5e7eb' },
   headerSub: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  columns: { flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', overflow: 'hidden' },
+  columns: { flex: 1, display: 'grid', gridTemplateColumns: '1.3fr 1fr 1fr', overflow: 'hidden' },
   col: { borderRight: '1px solid #1f2937', overflowY: 'auto', display: 'flex', flexDirection: 'column' },
   colLast: { overflowY: 'auto', display: 'flex', flexDirection: 'column' },
   colHeader: { padding: '12px 16px', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 },
   colTitle: { fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 },
-  colBody: { padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, flex: 1 },
+  colBody: { padding: '12px 16px', overflow: "auto", height: 'calc(100vh - 180px)', display: 'flex', flexDirection: 'column', gap: 8, },
 
   // Cards
   card: { background: '#111827', border: '1px solid #1f2937', borderRadius: 8, padding: 12 },
   cardActive: { background: '#111827', border: '1px solid #6366f1', borderRadius: 8, padding: 12 },
-  cardTitle: { fontSize: 13, fontWeight: 600, color: '#e5e7eb', margin: '0 0 3px' },
-  cardMeta: { fontSize: 11, color: '#9ca3af', margin: 0 },
+  cardTitle: { fontSize: 16, fontWeight: 600, color: '#e5e7eb', margin: '0 0 3px' },
+  cardMeta: { fontSize: 14, color: '#9ca3af', margin: 0 },
   cardRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   cardActions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 },
 
   // Stat grid
-  statGrid: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4, margin: '8px 0' },
+  statGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 4, margin: '8px 0'
+  },
   statBox: { background: '#0f172a', borderRadius: 5, padding: '5px 6px', textAlign: 'center' },
-  statLabel: { fontSize: 9, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' },
-  statValue: { fontSize: 13, fontWeight: 700, color: '#e5e7eb' },
+  statLabel: { fontSize: 12, color: '#939aa8', textTransform: 'uppercase', fontWeight: "bold", letterSpacing: '0.04em', display: 'block' },
+  statValue: { fontSize: 14, fontWeight: 700, color: '#e5e7eb' },
 
   // Buttons
   btn: { padding: '4px 10px', borderRadius: 5, fontSize: 12, cursor: 'pointer', fontWeight: 500, border: '1px solid #374151', background: '#1f2937', color: '#e5e7eb' },
@@ -87,8 +93,10 @@ const s: Record<string, React.CSSProperties> = {
 
   // Overlay + form panel
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  formPanel: { background: '#111827', border: '1px solid #374151', borderRadius: 10, padding: 24, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto' },
+  formPanel: { background: '#111827', border: '1px solid #374151', borderRadius: 10, padding: 10, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto' },
+  modal: { background: '#111827', border: '1px solid #374151', borderRadius: 10, padding: 10, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto' },
   formTitle: { fontSize: 15, fontWeight: 700, color: '#e5e7eb', margin: '0 0 18px' },
+  modalTitle: { fontSize: 15, fontWeight: 700, color: '#e5e7eb', margin: '0 0 18px' },
   label: { display: 'block', fontSize: 11, color: '#9ca3af', marginBottom: 5, fontWeight: 500 },
   input: { width: '100%', boxSizing: 'border-box', background: '#0f172a', border: '1px solid #374151', borderRadius: 6, color: '#e5e7eb', padding: '8px 10px', fontSize: 13, outline: 'none' },
   fieldGroup: { marginBottom: 14 },
@@ -149,6 +157,16 @@ const s: Record<string, React.CSSProperties> = {
     justifyContent: 'flex-end',
     flexShrink: 0,
   },
+  warningNote: {
+    fontSize: 14,
+
+    background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+    border: '1px solid #ef4444',
+    borderRadius: 6,
+    padding: '6px 10px',
+    marginTop: 6,
+    marginBottom: 16
+  },
 }
 
 const STATUS_BADGE: Record<string, React.CSSProperties> = {
@@ -196,10 +214,10 @@ export default function ProjectDetail() {
   const [childAllocForm, setChildAllocForm] = useState({ row_id: '', source: 'local' as 'local' | 'external', item_id: '', item_name: '', item_unit: '', item_unit_size: '', quantity_allocated: '', sub_project_id: "" })
   const [mainAllocErr, setMainAllocErr] = useState('')
   const [showAddSub, setShowAddSub] = useState(false)
-  const [addSubForm, setAddSubForm] = useState({ title: '', notes: '', location: '' })
+  const [addSubForm, setAddSubForm] = useState({ title: '', notes: '', location: '', contract_value: '',  })
   const [addSubErr, setAddSubErr] = useState('')
   const [showAddChild, setShowAddChild] = useState(false)
-  const [addChildForm, setAddChildForm] = useState({ title: '', notes: '', location: "" })
+  const [addChildForm, setAddChildForm] = useState({ title: '', notes: '', location: "", contract_value: '' })
   const [addChildErr, setAddChildErr] = useState('')
   const [returning, setReturning] = useState<Allocation | null>(null)
   const [returnQty, setReturnQty] = useState('')
@@ -220,6 +238,11 @@ export default function ProjectDetail() {
   const [adjustingIdForReturn, setAdjustingIdForReturn] = useState<string>("");
   const [childProject, setChildProject] = useState<SubProject>();
   const [selectedAllocationInSubProject, setSelectedAllocationInSubProject] = useState<InventoryItem>();
+  const [showModal, setShowModal] = useState<boolean>(false)
+  const [editContractValue, setEditContractValue] = useState<boolean>(true)
+  const [projectValue, setProjectValue] = useState<number | 0>();
+  const [editingId, setEditingId] = useState<string| null>()
+  const [editingIdChild, setEditingIdChild] = useState<string| null>()
 
 
   const loadAll = useCallback(async () => {
@@ -231,7 +254,7 @@ export default function ProjectDetail() {
         window.api.subProjects.getByProject(id),
         window.api.items.getAll(),
       ])
-      if (projRes.success) setProject(projRes.data)
+      if (projRes.success) { setProject(projRes.data); setProjectValue(projRes?.data?.contract_value || 0) }
       if (allocRes.success) {
         setAllocations(allocRes.data ?? [])
       }
@@ -263,11 +286,21 @@ export default function ProjectDetail() {
   useEffect(() => { loadAll() }, [loadAll])
 
   useEffect(() => {
-    if (selectedSubId) loadSubAllocs(selectedSubId)
+
+    if (selectedSubId) loadSubAllocs(selectedSubId);
     else setSubAllocs([])
   }, [selectedSubId, loadSubAllocs])
-  
+
   const refresh = () => { loadAll(); if (selectedSubId) loadSubAllocs(selectedSubId) }
+
+
+  const fetchProjectValue = async () => {
+    const res = await window.api.projects.getById(id!)
+    if (res.success) {
+      setProjectValue(res?.data?.contract_value || 0)
+    }
+  }
+
 
   const pickInventory = (itemId: string) => {
     const item = inventory.find(i => i.id === itemId)
@@ -388,6 +421,7 @@ export default function ProjectDetail() {
     if (!sub) { toast.error("Invalid sub-project"); return }
     try {
       const res = await window.api.allocations.getSubAllocationsBySubProject(sub?.id);
+      console.log(res.data)
       if (res.success) setAllocatedItemsForSub(res.data)
       else toast.error(res.error || "Failed to load allocations for sub-project")
     } catch (error) {
@@ -403,7 +437,7 @@ export default function ProjectDetail() {
     if (!quantity_allocated || parseFloat(quantity_allocated) <= 0) { toast.error("Invalid quantity"); setMainAllocErr('Enter a valid quantity'); return }
     if (!selectedAllocationInSubProject) return
     const remaining = (selectedAllocationInSubProject?.quantity_allocated + selectedAllocationInSubProject?.quantity_received_back) - (selectedAllocationInSubProject.quantity_assigned + selectedAllocationInSubProject.quantity_returned + selectedAllocationInSubProject.quantity_used)
-    if(remaining < parseFloat(quantity_allocated)) {toast.error(`Maximum amount is ${remaining}`);return} 
+    if (remaining < parseFloat(quantity_allocated)) { toast.error(`Maximum amount is ${remaining}`); return }
     try {
       const res = await window.api.allocations.createSubAllocation(subAllocForm)
       console.log(res)
@@ -423,10 +457,11 @@ export default function ProjectDetail() {
   }
 
   const handleAddSub = async () => {
+    console.log(addSubForm);
     if (!addSubForm.title.trim() || !addSubForm.location.trim()) { setAddSubErr('Title and Location are required'); return }
     try {
-      const res = await window.api.subProjects.create({ project_id: id!, title: addSubForm.title, notes: addSubForm.notes, location: addSubForm.location })
-      if (res.success) { toast.success("Sub-project created successfully"); setShowAddSub(false); setAddSubForm({ title: '', notes: '', location: '' }); setAddSubErr(''); refresh() }
+      const res = await window.api.subProjects.create({ project_id: id!, title: addSubForm.title, notes: addSubForm.notes, location: addSubForm.location, contract_value: addSubForm.contract_value })
+      if (res.success) { fetchProjectValue(); toast.success("Sub-project created successfully"); setShowAddSub(false); setAddSubForm({ title: '', notes: '', location: '', contract_value: '' }); setAddSubErr(''); refresh() }
       else { setAddSubErr(res.error ?? 'Failed'); toast.error(res.error || "Failed to create sub-project") }
     } catch (error) {
       console.error(error)
@@ -435,11 +470,13 @@ export default function ProjectDetail() {
   }
 
   const handleAddChild = async () => {
+    console.log(addChildForm);
+
     if (!subProject) { toast.error("Select a sub-project"); return }
-    if (!addChildForm.title.trim() || !addChildForm.location.trim()) { toast.error("Title and Location are required"); setAddChildErr('Title and Location are required'); return }
+    if (!addChildForm.title.trim() || !addChildForm.location.trim() || !addChildForm.contract_value) { toast.error("Title, Contract Value and Location are required"); setAddChildErr('Title Contract Value and Location are required'); return }
     try {
-      const res = await window.api.childProjects.create({ project_id: id!, parent_id: subProject?.id, title: addChildForm.title, notes: addChildForm.notes, location: addChildForm.location })
-      if (res.success) { toast.success("Child project created successfully"); getChildProjectsBySubProject(subProject.id); setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr(''); refresh() }
+      const res = await window.api.childProjects.create({ project_id: id!, parent_id: subProject?.id, title: addChildForm.title, notes: addChildForm.notes, location: addChildForm.location, contract_value: addChildForm.contract_value })
+      if (res.success) { fetchProjectValue(); toast.success("Child project created successfully"); getChildProjectsBySubProject(subProject.id); setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '', contract_value: '' }); setAddChildErr(''); refresh() }
       else { setAddChildErr(res.error ?? 'Failed'); toast.error(res.error || "Failed to create child project") }
     } catch (error) {
       console.error(error)
@@ -462,19 +499,24 @@ export default function ProjectDetail() {
   }
 
   const handleMarkUsed = async (item: any) => {
-    if (!item || !usedQty || ! markUsedAllocation) return
+
+    if (!item || !usedQty) return
     if (isNaN(usedQty) || usedQty < 0) { toast.error("Enter a valid quantity"); return }
-    let remaining = (markUsedAllocation?.quantity_allocated + markUsedAllocation?.quantity_received_back) - markUsedAllocation?.quantity_returned - markUsedAllocation?.quantity_used - markUsedAllocation?.quantity_assigned;
-    if(remaining < usedQty) {toast.error(`Maximum Quantity is ${remaining}`);return}
+    let remaining = (item?.quantity_allocated + item?.quantity_received_back) - item?.quantity_returned - item?.quantity_used - item?.quantity_assigned;
+    if (remaining < usedQty) { toast.error(`Maximum Quantity is ${remaining}`); return }
     try {
       const res = await window.api.allocations.markUsed(item.id, usedQty)
-      if (res.success) {setShowChildAllocatedItems(false); setShowAllocated(false); toast.success("Marked as Used"); setUsedQty(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr(""); setShowMarkUsedModal(false) }
-      if(childProject) {getAllocatedItemsByChildProject(childProject.id);}
-      else {
-        setAdjustingId(""); toast.error(res.error || "Something went wrong"); setShowAllocated(false); setAdjustingIdForReturn(""); setMainAllocErr(res.error || "Something wernt wrong.");;
+      if (res.success) { setShowChildAllocatedItems(false); toast.success("Marked as Used"); setUsedQty(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr(""); setShowMarkUsedModal(false) }
+
+      if (childProject) { getAllocatedItemsByChildProject(childProject.id); }
+      if (subProject) { getSubAllocationsForSubProject(subProject); }
+      if (!res.success) {
+
+        setAdjustingId(""); toast.error(res.error || "Something went wrong"); setShowAllocated(false); setAdjustingIdForReturn(""); setMainAllocErr(res.error || "Something wernt wrong.");
         console.log("Error marking used:", res?.error)
         setUsedQty(0)
       }
+
     } catch (error) {
       setShowAllocated(false)
       console.error("Error marking used:", error)
@@ -487,8 +529,9 @@ export default function ProjectDetail() {
     try {
       const res = await window.api.allocations.returnSubToMain(subAlloc.id, qtyToReturn)
       console.log(res)
+      if (subProject) getSubAllocationsForSubProject(subProject);
       if (res.success) {
-        setQtyToReturn(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); toast.success("Item return to main project"); setMainAllocErr(""); setShowAllocated(false);
+        setQtyToReturn(0); refresh(); setAdjustingId(""); setAdjustingIdForReturn(""); toast.success("Item return to main project"); setMainAllocErr("");
       } else {
         setAdjustingId(""); setAdjustingIdForReturn(""); toast.error("Failed to return item"); setMainAllocErr(res.error || "Something wernt wrong.")
       }
@@ -503,8 +546,8 @@ export default function ProjectDetail() {
     if (!childAlloc || !qtyToReturn) { toast.error("Enter a valid quantity"); return }
     try {
       const res = await window.api.allocations.returnChildToSub(childAlloc.id, qtyToReturn)
-      if(!childProject) return;
-      if (res.success) {getAllocatedItemsByChildProject(childProject.id); toast.success("Item returned successfully"); setQtyToReturn(0); refresh(); setShowAllocated(false); }
+      if (!childProject) return;
+      if (res.success) { getAllocatedItemsByChildProject(childProject.id); toast.success("Item returned successfully"); setQtyToReturn(0); refresh(); setShowAllocated(false); }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to return item")
       console.error(error)
@@ -515,7 +558,7 @@ export default function ProjectDetail() {
     if (!confirm('Delete this sub-project and all its data?')) return
     try {
       const res = await window.api.subProjects.delete(subId)
-      if (res.success) { toast.success("Sub project deleted successfully"); if (selectedSubId === subId) setSelectedSubId(null); refresh() }
+      if (res.success) { fetchProjectValue(); toast.success("Sub project deleted successfully"); if (selectedSubId === subId) setSelectedSubId(null); refresh() }
       else toast.error(res.error)
     } catch (error) {
       console.error(error)
@@ -529,6 +572,7 @@ export default function ProjectDetail() {
       const res = await window.api.childProjects.updateStatus(childId, status)
       if (res.success) {
         getChildProjectsBySubProject(selectedSubId!)
+        refresh();
         toast.success("Status Updated");
       }
       else {
@@ -563,6 +607,7 @@ export default function ProjectDetail() {
     try {
       const res = await window.api.childProjects.delete(childId);
       if (res.success) {
+        fetchProjectValue();
         toast.success("Child project deleted");
         getChildProjectsBySubProject(selectedSubId!)
       } else {
@@ -573,11 +618,101 @@ export default function ProjectDetail() {
       console.error(error instanceof Error ? error.message : "Something went wrong");
     }
   }
+
+
+
+  const hasChild = async (sub: SubProject) => {
+    const res = await window.api.childProjects.getBySubProject(sub.id)
+    console.log(sub)
+    if(sub.contract_value === 0 || String(sub.contract_value) === "") {
+      toast.warn("Add child project or set a contract value for this sub project to add expeses")
+      return
+    }
+    if (res.data.length === 0) {
+      navigate(`/projects/project-analytics/${sub.id}`)
+    } else {
+      toast.warn("This project has child projects. You can't directly add expenses here")
+      return
+
+    }
+  }
   const childSubAllocs = (childId: string) =>
     subAllocs.filter(sa => sa.sub_project_id === childId)
 
   if (loading) return <div style={{ padding: 40, color: '#9ca3af' }}>Loading…</div>
   if (!project) return <div style={{ padding: 40, color: '#ef4444' }}>Project not found</div>
+
+
+  const canCreateChildProjectWhenExistContractValue = async(sub:SubProject) => {
+    const res = await window.api.childProjects.getBySubProject(sub.id!)
+    if(res?.data?.length === 0 && sub.contract_value > 0){
+      toast.warning("You can't create child project with existing contract value")
+    }
+    else {
+       setSubProject(sub); setShowAddChild(true); setSelectedSubId(sub.id);  getChildProjectsBySubProject(sub.id);
+     }
+  }
+
+
+  // /////////////////////////////////////////////////////////////
+  const editSub = async (sub:SubProject)=>{
+    console.log(sub)
+    if(!sub) return
+    setAddSubForm({title:sub.title, notes:sub.notes ?? "", location:sub.location ?? "", contract_value:String(sub.contract_value) ?? ""})
+    setEditingId(sub.id!)
+  }
+
+  const editChild = async (child:SubProject)=>{
+    if(!child) return
+    setAddSubForm({title:child.title, notes:child.notes ?? "", location:child.location ?? "", contract_value:String(child.contract_value) ?? ""})
+    setEditingIdChild(child.id)
+  }
+
+  const canEditContractValue = async (sub:SubProject)=>{
+    const res = await window.api.childProjects.getBySubProject(sub.id!)
+    if(res.data.length > 0){
+      setEditContractValue(false)
+    } else {
+      setEditContractValue(true)
+    }
+  }
+  // /////////////////////////////////////////////////////////////
+const handleEditSub = async ()=>{
+  if(!editingId) return
+  try {
+    const res = await window.api.subProjects.update(editingId,addSubForm)
+    if(res.success){
+      refresh();
+      setEditingId("");
+      toast.success("Changes saved successfully")
+    }
+
+  } catch (error) {
+    console.error("Something went wrong")
+    
+  }
+}
+
+
+const handleEditChild = async ()=>{
+  if(!editingIdChild) return
+  try {
+    const res = await window.api.childProjects.update(editingIdChild, addSubForm);
+    if(res.success){
+      toast.success("Changes saved successfully")
+      refresh();
+      if(!selectedSub) return
+      getChildProjectsBySubProject(selectedSub.id)
+      setEditingIdChild("")
+      setEditingId("")
+    }
+  } catch (error) {
+    setEditingIdChild("")
+      setEditingId("")
+  }
+
+}
+
 
   return (
     <div style={s.page}>
@@ -588,6 +723,7 @@ export default function ProjectDetail() {
           <h2 style={s.headerTitle}>{project.title}</h2>
           <p style={s.headerSub}>{project.client_name}{project.location ? ` · ${project.location}` : ''}</p>
         </div>
+        <p style={{color:"#22c55e"}}>Rs {projectValue?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
         <StatusBadge status={project.status} />
       </div>
 
@@ -659,12 +795,13 @@ export default function ProjectDetail() {
         <div style={s.col}>
           <div style={s.colHeader}>
             <p style={s.colTitle}>Sub-projects</p>
-            <button style={s.btnPrimary} onClick={() => { setShowAddSub(true); setAddSubForm({ title: '', notes: '', location: '' }); setAddSubErr('') }}>+ Add</button>
+            <button style={s.btnPrimary} onClick={() => { setShowAddSub(true); setAddSubForm({ title: '', notes: '', location: '', contract_value: '' }); setAddSubErr('') }}>+ Add</button>
           </div>
           <div style={s.colBody}>
             {subProjects.length === 0 && <p style={s.empty}>No sub-projects yet</p>}
 
             {subProjects.map(sub => {
+
               const isSelected = sub.id === selectedSubId
               const myAllocs = subAllocs.filter(sa => sa.sub_project_id === sub.id)
 
@@ -672,11 +809,13 @@ export default function ProjectDetail() {
                 <div key={sub.id}
                   style={isSelected ? s.cardActive : s.card}
                   onClick={() => { setSelectedSubId(sub.id); getChildProjectsBySubProject(sub.id) }}>
+                  <p style={{color:"#22c55e"}}>{sub.contract_value !== undefined || sub.contract_value !== null || sub.contract_value > 0 ? `Contract Value: Rs ${sub.contract_value?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}` : 'Contract Value: N/A'}</p>
 
-                  <div style={s.cardRow}>
+                  <div style={s.cardRow} >
                     <p style={{ ...s.cardTitle, color: isSelected ? '#818cf8' : '#e5e7eb' }}>{sub.title}</p>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
                       <StatusBadge status={sub.status} />
+                      <button style={{padding:"0px 5px"}} onClick={()=>{canEditContractValue(sub); editSub(sub)}}>Edit</button>
                       <button style={s.btnDanger}
                         onClick={e => { e.stopPropagation(); handleDeleteSub(sub.id) }}>✕</button>
                     </div>
@@ -684,16 +823,19 @@ export default function ProjectDetail() {
 
                   {sub.notes && <p style={s.cardMeta}>{sub.notes}</p>}
 
-                  {/* Sub allocations summary */}
-
-
-                  <div style={{ display: 'flex', gap: 10 }} onClick={e => e.stopPropagation()}>
-                    <button style={s.btnPrimary} onClick={(e) => { e.stopPropagation(); setSubProject(sub); getSubAllocationsForSubProject(sub); setShowAllocated(true); }}>View Items</button>
-                    <button style={s.btnWarn} onClick={(e) => { e.stopPropagation(); setSubProject(sub); setShowAddChild(true) }}>+Child</button>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))',
+                    gap: 5,
+                    margin: '8px 0'
+                  }} onClick={e => e.stopPropagation()}>
+                    <button style={s.btnPrimary} onClick={(e) => { e.stopPropagation(); setSubProject(sub); getSubAllocationsForSubProject(sub); setShowChildAllocatedItems(false); setShowAllocated(true); }}>View Items</button>
+                    <button style={s.btnWarn} onClick={(e) => { e.stopPropagation(); canCreateChildProjectWhenExistContractValue(sub) }}>+Child</button>
                     <button style={s.btnSuccess} onClick={(e) => { e.stopPropagation(); setSubProject(sub); getSubAllocations(); setShowSubAlloc(true) }}>Allocate</button>
                   </div>
 
-                  <div style={{ ...s.cardActions, marginTop: myAllocs.length ? 6 : 8 }}
+
+                  <div style={{ ...s.cardActions, marginTop: myAllocs.length ? 6 : 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                     onClick={e => e.stopPropagation()}>
                     <select
                       value={sub.status}
@@ -703,7 +845,13 @@ export default function ProjectDetail() {
                       <option value="in_progress">In progress</option>
                       <option value="completed">Completed</option>
                     </select>
+
+                    <button onClick={() => { hasChild(sub); }}>
+                      Add Expense
+                    </button>
                   </div>
+
+
                 </div>
               )
             })}
@@ -716,11 +864,7 @@ export default function ProjectDetail() {
             <p style={s.colTitle}>
               {selectedSub ? `${selectedSub.title} — Children` : 'Children'}
             </p>
-            {selectedSubId && (
-              <button style={s.btnPrimary} onClick={() => { setShowAddChild(true); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr('') }}>
-                + Add child
-              </button>
-            )}
+           
           </div>
           <div style={s.colBody}>
             {!selectedSubId && (
@@ -735,10 +879,12 @@ export default function ProjectDetail() {
               const myAllocs = childSubAllocs(child.id)
               return (
                 <div key={child.id} style={s.card}>
+                    <p style={{color:"#22c55e"}}>{child.contract_value !== undefined ? `Contract Value: Rs ${child.contract_value?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}` : 'Contract Value: N/A'}</p>
                   <div style={s.cardRow}>
                     <p style={s.cardTitle}>{child.title}</p>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <StatusBadge status={child.status} />
+                      <button style={{padding:"0px 6px"}} onClick={()=> {editChild(child)}}>Edit</button>
                       <button style={s.btnDanger} onClick={() => handleDeleteChild(child.id)}>✕</button>
                     </div>
                   </div>
@@ -771,29 +917,39 @@ export default function ProjectDetail() {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }} onClick={e => e.stopPropagation()}>
-                    <div style={{ ...s.cardActions }}>
-                      <select
-                        value={child.status}
-                        onChange={e => { handleChildStatus(child.id, e.target.value); console.log(child.status) }}
-                        style={{ ...s.btn, cursor: 'pointer', fontSize: 11 }}>
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button style={s.btnPrimary} onClick={() => { setChildProject(child); getAllocatedItemsByChildProject(child.id) }}>
-                        View Items
-                      </button>
-                      <button style={s.btnSuccess} onClick={() => {
-                        if (!selectedSub || !child) return;
-                        setChildProjectId(child.id);
-                        setShowChildAlloc(true); allocateForChildProject(child.id, selectedSub?.id)
-                      }}>
-                        Allocate
-                      </button>
-                    </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))',
+                    gap: 5,
+                    margin: '8px 0'
+                  }} onClick={e => e.stopPropagation()}>
+
+
+                    <button style={s.btnPrimary} onClick={() => { setChildProject(child); getAllocatedItemsByChildProject(child.id) }}>
+                      View Items
+                    </button>
+                    <button style={s.btnSuccess} onClick={() => {
+                      if (!selectedSub || !child) return;
+                      setChildProjectId(child.id);
+                      setShowChildAlloc(true); allocateForChildProject(child.id, selectedSub?.id)
+                    }}>
+                      Allocate
+                    </button>
+
+                  </div>
+                  <div style={{ ...s.cardActions }}>
+                    <select
+                      value={child.status}
+                      onChange={e => { handleChildStatus(child.id, e.target.value); console.log(child.status) }}
+                      style={{ ...s.btn, cursor: 'pointer', fontSize: 11 }}>
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                    
+                    <button onClick={() => navigate(`/projects/project-analytics/${child.id}`)}>
+                      Add Expense
+                    </button>
                   </div>
 
                 </div>
@@ -805,6 +961,113 @@ export default function ProjectDetail() {
 
       {/* oVERLAYS */}
 
+
+
+{/* Editing chid project */}
+
+
+{editingIdChild && (
+        <div style={s.overlay} onClick={() => {}}>
+          <div style={s.formPanel} onClick={e => e.stopPropagation()}>
+            <p style={s.formTitle}>Edit child-project</p>
+            {addSubErr && <div style={s.errBox}>{addSubErr}</div>}
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Title *</label>
+              <input style={s.input} value={addSubForm.title} autoFocus
+                onChange={e => setAddSubForm(f => ({ ...f, title: e.target.value }))}
+              />
+
+
+              <label style={s.label}>Location *</label>
+              <input style={s.input} value={addSubForm.location}
+                onChange={e => setAddSubForm(f => ({ ...f, location: e.target.value }))}
+                />
+            </div>
+            <div style={s.fieldGroup}>
+             
+              <label style={s.label}>Contract Value</label>
+              <input disabled={!editContractValue} style={s.input} type='number' step='0.01'
+                value={addSubForm.contract_value} onChange={e => setAddSubForm(f => ({ ...f, contract_value: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleEditChild()}  />
+
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Notes</label>
+              <textarea style={{ ...s.input, minHeight: 60, resize: 'vertical' }}
+                value={addSubForm.notes} onChange={e => setAddSubForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            <div style={s.formRow}>
+              <button style={s.btn} onClick={() => {
+                setEditingIdChild("")
+              setAddSubForm({title:"", notes: "", location:"", contract_value:""})
+
+              }}>Cancel</button>
+              <button style={s.btnLg} onClick={handleEditChild}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+{/* Editing chid project */}
+
+{/* editing sub project */}
+
+
+ {editingId && (
+        <div style={s.overlay} onClick={() => {}}>
+          <div style={s.formPanel} onClick={e => e.stopPropagation()}>
+            <p style={s.formTitle}>Edit sub-project</p>
+            {addSubErr && <div style={s.errBox}>{addSubErr}</div>}
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Title *</label>
+              <input style={s.input} value={addSubForm.title} autoFocus
+                onChange={e => setAddSubForm(f => ({ ...f, title: e.target.value }))}
+              />
+
+
+              <label style={s.label}>Location *</label>
+              <input style={s.input} value={addSubForm.location}
+                onChange={e => setAddSubForm(f => ({ ...f, location: e.target.value }))}
+                />
+            </div>
+            <div style={s.fieldGroup}>
+              {!editContractValue && (
+                <p style={s.warningNote}>
+                ⚠ Note: Contract value cannot be edited since this containd child projects.
+              </p>
+              )}
+              <label style={s.label}>Contract Value (Ignore if this Sub Project has Child Projects)</label>
+              <input disabled={!editContractValue} style={s.input} type='number' step='0.01'
+                value={addSubForm.contract_value} onChange={e => setAddSubForm(f => ({ ...f, contract_value: e.target.value }))} onKeyDown={e => e.key === 'Enter' && handleEditSub()}  />
+
+            </div>
+            <div style={s.fieldGroup}>
+              <label style={s.label}>Notes</label>
+              <textarea style={{ ...s.input, minHeight: 60, resize: 'vertical' }}
+                value={addSubForm.notes} onChange={e => setAddSubForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            <div style={s.formRow}>
+              <button style={s.btn} onClick={() => {
+                setEditingId("")
+              setAddSubForm({title:"", notes: "", location:"", contract_value:""})
+
+              }}>Cancel</button>
+              <button style={s.btnLg} onClick={handleEditSub}>Save Changes</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+
+{/* editing sub project */}
+
+
+
+
+
+
       {showChildAllocatedItems && (
         <div style={s.overlay} onClick={() => setShowChildAllocatedItems(false)}>
           <div style={{ ...s.formPanel, maxWidth: 660, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
@@ -813,7 +1076,7 @@ export default function ProjectDetail() {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1.25rem', flexShrink: 0 }}>
               <p style={s.formTitle}>Allocated items to xxxxxxxxxx {childProject?.title}</p>
-              <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => setShowChildAllocatedItems(false)}>✕</button>
+              <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => { setShowChildAllocatedItems(false); setAdjustingId(""); setAdjustingIdForReturn(""); }}>✕</button>
             </div>
 
             {allocatedItemsForChild?.length === 0 && (
@@ -823,10 +1086,11 @@ export default function ProjectDetail() {
               {allocatedItemsForChild?.map(item => {
                 const remaining = item.quantity_allocated - item.quantity_used - item.quantity_returned;
                 return (
-                  <div key={item.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, width: "100%", padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
+                  <div key={item.id} style={{ border: '1px solid #98b4ec', borderRadius: 2, width: "100%", padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                       <span style={{ fontWeight: 500 }}>{item.item_name}</span>
+                      <span style={{ fontWeight: 400, color: "#bcd0f8", fontSize: "13px" }}>{item.allocated_at}</span>
                     </div>
 
                     {/* Stats row */}
@@ -852,16 +1116,16 @@ export default function ProjectDetail() {
                         {adjustingId === item.id ? (
                           <div style={{ display: 'flex', gap: 5 }}>
 
-                            <button style={s.btn} onClick={() => {
+                            <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#3fb950", border: "1px solid #3fb950", borderRadius: 2 }} onClick={() => {
                               setMarkUsedAllocation(item);
-                              if(usedQty === 0 || !usedQty) return
+                              if (usedQty === 0 || !usedQty) return
                               const remaining = item.quantity_allocated - (item.quantity_used + item.quantity_returned)
-                              if(remaining < usedQty) {toast.error(`remaining ${remaining}`);return}
-                              if (item.quantity_allocated - item.quantity_returned - item.quantity_used > 0){ handleMarkUsed(item)}
+                              if (remaining < usedQty) { toast.error(`remaining ${remaining}`); return }
+                              if (item.quantity_allocated - item.quantity_returned - item.quantity_used > 0) { handleMarkUsed(item) }
                               else setErrorTitle("Not available remaining items to use")
-                            }}>Save</button>
+                            }}>Mark Used</button>
                             <input
-                              style={{ ...s.input, flex: 1, height: 32 }}
+                              style={{ ...s.input, flex: 1, height: 26 }}
                               type="number"
                               min={1}
                               autoFocus
@@ -874,7 +1138,7 @@ export default function ProjectDetail() {
                           </div>
 
                         ) : item.quantity_allocated - item.quantity_returned - item.quantity_used > 0 ? (
-                          <button onClick={() => { setAdjustingId(item.id) }}>
+                          <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#3fb950", border: "1px solid #3fb950", borderRadius: 2 }} onClick={() => { { setAdjustingId(item.id); setAdjustingIdForReturn(""); } }}>
                             Mark Used
                           </button>
                         ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No more available to mark as used or return</span>)}
@@ -883,7 +1147,7 @@ export default function ProjectDetail() {
                         {item.quantity_remaining > 0 && adjustingIdForReturn === item.id && (
                           <div style={{ display: 'flex', gap: 5 }}>
                             <input
-                              style={{ ...s.input, flex: 1, height: 32 }}
+                              style={{ ...s.input, flex: 1, height: 26 }}
                               type="number"
                               min={1}
                               autoFocus
@@ -892,16 +1156,19 @@ export default function ProjectDetail() {
                               value={qtyToReturn}
                               onChange={e => setQtyToReturn(parseInt(e.target.value))}
                             />
-                            <button style={s.btn} onClick={() =>{ 
-                               if(qtyToReturn === 0 || !qtyToReturn) return
+                            <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#d29922", border: "1px solid #d29922", borderRadius: 2 }} onClick={() => {
+                              if (qtyToReturn === 0 || !qtyToReturn) return
                               const remaining = item.quantity_allocated - (item.quantity_used + item.quantity_returned)
-                              if(remaining < qtyToReturn) {toast.error(`remaining ${remaining}`);return}
+                              if (remaining < qtyToReturn) { toast.error(`remaining ${remaining}`); return }
                               handleReturnInChild(item)
 
                             }}>Return</button>
                           </div>)}
                         {item.quantity_allocated - item.quantity_returned - item.quantity_used > 0 && adjustingIdForReturn !== item.id && (
-                          <button onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
+                          <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#d29922", border: "1px solid #d29922", borderRadius: 2 }} onClick={() => {
+                            setAdjustingId("");
+                            adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)
+                          }}>
                             Return
                           </button>
                         )}
@@ -1054,6 +1321,15 @@ export default function ProjectDetail() {
                 onKeyDown={e => e.key === 'Enter' && handleAddSub()} />
             </div>
             <div style={s.fieldGroup}>
+              <p style={s.warningNote}>
+                ⚠ Note: If this Sub project has child projects, please leave Contract Value empty.
+              </p>
+              <label style={s.label}>Contract Value (Ignore if this Sub Project has Child Projects)</label>
+              <input style={s.input} type='number' step='0.01'
+                value={addSubForm.contract_value} onChange={e => setAddSubForm(f => ({ ...f, contract_value: e.target.value }))} />
+
+            </div>
+            <div style={s.fieldGroup}>
               <label style={s.label}>Notes</label>
               <textarea style={{ ...s.input, minHeight: 60, resize: 'vertical' }}
                 value={addSubForm.notes} onChange={e => setAddSubForm(f => ({ ...f, notes: e.target.value }))} />
@@ -1079,9 +1355,6 @@ export default function ProjectDetail() {
 
               <button style={{ ...s.btn, padding: '4px 8px' }} onClick={() => { setShowAllocated(false); setAdjustingId(""); setAdjustingIdForReturn(""); setMainAllocErr("") }}>✕</button>
             </div>
-            {/* {mainAllocErr && <div style={s.errBox}>{mainAllocErr}</div>} */}
-
-            {/* Scrollable list */}
 
             {
               allocatedItemsForSub?.length === 0 && (
@@ -1094,14 +1367,20 @@ export default function ProjectDetail() {
               {allocatedItemsForSub?.map(item => {
                 const remaining = item.quantity_allocated - item.quantity_used - item.quantity_returned - item.quantity_assigned + item.quantity_received_back;
                 return (
-                  <div key={item.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, width: "100%", padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
+                  <div key={item.id} style={{ border: '1px solid #98b4ec', borderRadius: 2, width: "100%", padding: '0.875rem 1rem', marginBottom: '0.625rem' }}>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                       <span style={{ fontWeight: 500 }}>{item.item_name}</span>
+                      <span style={{ fontWeight: 400, color: "#bcd0f8", fontSize: "13px" }}>{item.allocated_at.split(" ")[0]} - {item.allocated_at.split(" ")[1]}</span>
                     </div>
 
                     {/* Stats row */}
-                    <div style={{ display: 'flex', justifyContent: "space-between", width: "100%", marginBottom: 10 }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))',
+                      gap: 4,
+                      margin: '8px 0'
+                    }}>
                       {[
                         { label: 'Allocated', value: item.quantity_allocated, bg: 'rgba(56,139,253,0.15)', color: '#58a6ff' },
                         { label: 'Used', value: item.quantity_used, bg: 'rgba(63,185,80,0.15)', color: '#3fb950' },
@@ -1125,16 +1404,16 @@ export default function ProjectDetail() {
                         {adjustingId === item.id ? (
                           <div style={{ display: 'flex', gap: 5 }}>
 
-                            <button style={s.btn} onClick={() => {
+                            <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#3fb950", border: "1px solid #3fb950", borderRadius: 2 }} onClick={() => {
                               setMarkUsedAllocation(item);
-                              if(usedQty === 0 || !usedQty) {toast.error("Enter the amount"); return}
+                              if (usedQty === 0 || !usedQty) { toast.error("Enter the amount"); return }
                               const remaining = (item.quantity_allocated + item.quantity_received_back) - (item.quantity_assigned + item.quantity_returned + item.quantity_used);
-                              if(remaining < usedQty) {toast.error(`Maximum is ${remaining}`); return}
+                              if (remaining < usedQty) { toast.error(`Maximum is ${remaining}`); return }
                               if (item.quantity_allocated - item.quantity_returned - item.quantity_used > 0) handleMarkUsed(item)
-                                else toast.error("Not available remaining items to use")
-                            }}>Save</button>
+                              else toast.error("Not available remaining items to use")
+                            }}>Mark Usedx</button>
                             <input
-                              style={{ ...s.input, flex: 1, height: 32 }}
+                              style={{ ...s.input, flex: 1, height: 26 }}
                               type="number"
                               min={1}
                               autoFocus
@@ -1142,12 +1421,12 @@ export default function ProjectDetail() {
                               placeholder="Used"
                               value={usedQty}
                               onChange={e => setUsedQty(parseInt(e.target.value))}
-                              />
+                            />
 
                           </div>
 
-) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
-  <button onClick={() => { setUsedQty(0);setAdjustingId(item.id) }}>
+                        ) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
+                          <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#3fb950", border: "1px solid #3fb950", borderRadius: 2 }} onClick={() => { setUsedQty(0); setAdjustingId(item.id) }}>
                             Mark Used
                           </button>
                         ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No available to mark as used</span>)}
@@ -1162,7 +1441,7 @@ export default function ProjectDetail() {
                           <div style={{ display: 'flex', gap: 5 }}>
 
                             <input
-                              style={{ ...s.input, flex: 1, height: 32 }}
+                              style={{ ...s.input, flex: 1, height: 26 }}
                               type="number"
                               min={1}
                               autoFocus
@@ -1170,16 +1449,16 @@ export default function ProjectDetail() {
                               placeholder="Qty to return"
                               value={qtyToReturn}
                               onChange={e => setQtyToReturn(parseInt(e.target.value))}
-                              />
-                            <button style={s.btn} onClick={() => {
+                            />
+                            <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#d29922", border: "1px solid #d29922", borderRadius: 2 }} onClick={() => {
                               const remaining = (item.quantity_allocated + item.quantity_received_back) - (item.quantity_assigned + item.quantity_returned + item.quantity_used);
-                              if(qtyToReturn === 0 || !qtyToReturn) {toast.error("Enter the amount"); setQtyToReturn(0); return}
-                              if(remaining < qtyToReturn) {toast.error(`Maximum is ${remaining}`); setQtyToReturn(0); return}
+                              if (qtyToReturn === 0 || !qtyToReturn) { toast.error("Enter the amount"); setQtyToReturn(0); return }
+                              if (remaining < qtyToReturn) { toast.error(`Maximum is ${remaining}`); setQtyToReturn(0); return }
 
                               handleReturnInSub(item)
-                              }}>Real Return</button>
+                            }}>Return</button>
                           </div>) : item.quantity_allocated - item.quantity_returned - item.quantity_used - item.quantity_assigned + item.quantity_received_back > 0 ? (
-                            <button onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
+                            <button style={{ backgroundColor: "transparent", padding: "4px 8px", color: "#d29922", border: "1px solid #d29922", borderRadius: 2 }} onClick={() => adjustingIdForReturn === item.id ? setAdjustingIdForReturn("") : setAdjustingIdForReturn(item.id)}>
                               Return
                             </button>
                           ) : (<span style={{ color: '#6b7280', fontSize: 12 }}>No available to return</span>)}
@@ -1214,7 +1493,7 @@ export default function ProjectDetail() {
 
       {/* Add child project */}
       {showAddChild && (
-        <div style={s.overlay} onClick={() => { setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr('') }}>
+        <div style={s.overlay} onClick={() => { setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '', contract_value: '' }); setAddChildErr('') }}>
           <div style={s.formPanel} onClick={e => e.stopPropagation()}>
             <p style={s.formTitle}>New child project under <em style={{ color: '#818cf8' }}>{subProject?.title}</em></p>
             {addChildErr && <div style={s.errBox}>{addChildErr}</div>}
@@ -1227,6 +1506,12 @@ export default function ProjectDetail() {
               <label style={s.label}>Location *</label>
               <input style={s.input} value={addChildForm.location}
                 onChange={e => setAddChildForm(f => ({ ...f, location: e.target.value }))}
+              />
+
+
+              <label style={s.label}>Contract Value *</label>
+              <input type='number' style={s.input} value={addChildForm.contract_value}
+                onChange={e => setAddChildForm(f => ({ ...f, contract_value: e.target.value }))}
                 onKeyDown={e => e.key === 'Enter' && handleAddChild()} />
             </div>
             <div style={s.fieldGroup}>
@@ -1235,7 +1520,7 @@ export default function ProjectDetail() {
                 value={addChildForm.notes} onChange={e => setAddChildForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             <div style={s.formRow}>
-              <button style={s.btn} onClick={() => { setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '' }); setAddChildErr('') }}>Cancel</button>
+              <button style={s.btn} onClick={() => { setShowAddChild(false); setAddChildForm({ title: '', notes: '', location: '', contract_value: '' }); setAddChildErr('') }}>Cancel</button>
               <button style={s.btnLg} onClick={handleAddChild}>Add</button>
             </div>
           </div>
@@ -1278,6 +1563,26 @@ export default function ProjectDetail() {
           </div>
         </div>
       )}
+
+      {/* modal */}
+
+      {
+        showModal && (
+          <div style={s.overlay}>
+            <div style={s.modal} onClick={e => e.stopPropagation()}>
+              <p style={s.modalTitle}>
+                This Project has Child Projects
+              </p>
+              <div style={s.modalFooter}>
+                <button style={s.btnPrimary} onClick={() => setShowModal(false)}>
+                  Close
+                </button>
+
+              </div>
+            </div>
+          </div>
+        )
+      }
 
       {/* Mark used */}
       {showMarkUsedModal && markUsedAllocation && (

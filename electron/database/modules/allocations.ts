@@ -11,6 +11,8 @@ export interface SubProject {
   title: string
   status: 'pending' | 'in_progress' | 'completed'
   parent_id:string | null
+  contract_value:number | 0
+  location:string
   level: number
   notes: string | null
   created_at: string
@@ -56,6 +58,7 @@ export interface AllocationInput {
 export interface SubProjectInput {
   project_id: string
   title: string
+  contract_value?:number
   location:string
   status?: string
   notes?: string
@@ -160,34 +163,44 @@ export class SubProjectsRepository {
     this.db = db
   }
 
+  getIncompleteSubProjectsByProject(id:string):SubProject[]{
+    return this.db.prepare(`SELECT * FROM sub_projects WHERE project_id = ?`).all(id) as SubProject[]
+  }
+
   getByProject(projectId: string): SubProject[] {
     return this.db.prepare(`
       SELECT * FROM sub_projects
-      WHERE project_id = ?
+      WHERE project_id = ? AND is_deleted = 0
       ORDER BY created_at DESC
     `).all(projectId) as SubProject[]
   }
 
   getById(id: string): SubProject | undefined {
-    return this.db.prepare(`SELECT * FROM sub_projects WHERE id = ?`).get(id) as SubProject | undefined
+    console.log("Trying to search in sub")
+    return this.db.prepare(`SELECT * FROM sub_projects WHERE id = ? AND is_deleted = 0`).get(id) as SubProject | undefined
   }
 
   create(input: SubProjectInput): SubProject {
     const id = randomUUID()
     
-    console.log('Creating sub-project with input:', input)
-    this.db.prepare(`
-      INSERT INTO sub_projects (id, project_id, title, location, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, input.project_id, input.title, input.location, input.status ?? 'pending', input.notes ?? null)
+    const run = this.db.transaction(()=>{
+       this.db.prepare(`
+      INSERT INTO sub_projects (id, project_id, title, location, contract_value, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.project_id, input.title, input.location, input.contract_value ?? 0, input.status ?? 'pending', input.notes ?? null)
+      this.db.prepare(`
+          UPDATE projects SET contract_value = contract_value + ?, is_synced = 0  WHERE id = ? AND is_deleted = 0
+        `).run(input.contract_value ?? 0, input.project_id)
+    })
+   run()
     return this.getById(id)!
   }
 
 
   updateStatus(id: string, status: string): SubProject | undefined {
-    const sub = this.db.prepare(`SELECT * FROM sub_projects WHERE id = ?`).get(id) as SubProject | undefined
+    const sub = this.db.prepare(`SELECT * FROM sub_projects WHERE id = ? AND is_deleted = 0`).get(id) as SubProject | undefined
     if (!sub) throw new Error('Sub-project not found')
-      const childs = this.db.prepare(`SELECT * FROM child_projects WHERE parent_id = ?`).all(id) as any[];
+      const childs = this.db.prepare(`SELECT * FROM child_projects WHERE parent_id = ? AND is_deleted = 0`).all(id) as any[];
     if(childs.length> 0){
       const completedCount = childs.filter((c:any)=> c.status === "completed").length;
       if(status === "completed" && completedCount < childs.length){
@@ -198,20 +211,40 @@ export class SubProjectsRepository {
     return this.getById(id)
   }
 
-  update(id: string, input: Partial<SubProjectInput>): SubProject | undefined {
-    this.db.prepare(`
-      UPDATE sub_projects SET
-        title  = COALESCE(?, title),
-        status = COALESCE(?, status),
-        notes  = ?
-      WHERE id = ?
-    `).run(input.title ?? null, input.status ?? null, input.notes ?? null, id)
-    return this.getById(id)
+  update(id: string, input: Partial<SubProjectInput>) {
+    const subProject = this.db.prepare(`SELECT * FROM sub_projects WHERE id = ? AND is_deleted = 0`).get(id!) as SubProject | undefined
+    if(!subProject) throw new Error("Sub Project Not Found")
+      const currentSubProjectValue = subProject.contract_value;
+
+      
+      const run = this.db.transaction(()=>{
+        
+        this.db.prepare(`UPDATE projects SET contract_value = contract_value - ? + ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(currentSubProjectValue, input.contract_value ?? 0, subProject.project_id)
+        this.db.prepare(`
+          UPDATE sub_projects SET
+          title  = COALESCE(?, title),
+          location = ?,
+          contract_value = ?,
+          notes  = ?,
+          is_synced = 0
+          WHERE id = ? AND is_deleted = 0
+          `).run(input.title ?? null, input.location ?? null, input.contract_value ?? 0, input.notes ?? null, id)
+        })
+        run();
+    
   }
 
   delete(id: string): { success: boolean } {
-    const result = this.db.prepare(`DELETE FROM sub_projects WHERE id = ?`).run(id)
-    return { success: result.changes > 0 }
+    const subProject = this.db.prepare('SELECT * FROM sub_projects WHERE id = ? AND is_deleted = 0').get(id!) as SubProject | undefined
+    if(!subProject) return {success:false}
+    const deductAmount = Number(subProject.contract_value )?? 0;
+    console.log("Preparing to deducu in sub delete", deductAmount)
+    const run = this.db.transaction(()=>{
+      const result = this.db.prepare(`UPDATE sub_projects SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(id)
+      this.db.prepare(`UPDATE projects SET contract_value = contract_value - ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(deductAmount ?? 0,subProject.project_id);
+      return result;
+    })
+    return { success: run().changes > 0 }
   }
 }
 
@@ -219,10 +252,6 @@ export class SubProjectsRepository {
 
 export class AllocationsRepository {
   constructor(private db: Database.Database) {}
-
-  // ── Main Allocations ────────────────────────────────────────────────────────
-
-
 
 markUsed(id: string, qty: number) {
 
@@ -240,8 +269,7 @@ markUsed(id: string, qty: number) {
 
     if (result) {
       this.db.prepare(`UPDATE ${table} SET quantity_used = quantity_used + ? WHERE id = ?`).run(qty, id)
-      console.log(`ID belongs to table: ${table}`);
-      console.log(result);
+      
 
       return {
         table,
@@ -250,7 +278,6 @@ markUsed(id: string, qty: number) {
     }
   }
 
-  console.log("ID not found in any table");
 
   return null;
 }
@@ -260,13 +287,13 @@ markUsed(id: string, qty: number) {
   getByProject(projectId: string): Allocation[] {
     return this.db.prepare(`
       SELECT * FROM allocations
-      WHERE project_id = ?
+      WHERE project_id = ? AND is_deleted = 0
       ORDER BY created_at ASC
     `).all(projectId) as Allocation[]
   }
 
   getById(id: string): Allocation | undefined {
-    return this.db.prepare(`SELECT * FROM allocations WHERE id = ?`).get(id) as Allocation | undefined
+    return this.db.prepare(`SELECT * FROM allocations WHERE id = ? AND is_deleted = 0`).get(id) as Allocation | undefined
   }
 
   create(input: CreateAllocationInput): Allocation {
@@ -295,11 +322,7 @@ markUsed(id: string, qty: number) {
     return this.getById(id)!
   }
 
-  /**
-   * Return quantity from a main allocation back to inventory.
-   * Only allowed if source is 'local'.
-   * quantity_returned cannot exceed (quantity_allocated - quantity_assigned - quantity_used).
-   */
+ 
   returnToInventory(id: string, quantity: number): Allocation {
     const alloc = this.getById(id)
     if (!alloc) throw new Error('Allocation not found')
@@ -332,7 +355,7 @@ markUsed(id: string, qty: number) {
       throw new Error(`Cannot delete: ${remaining} ${alloc.item_unit} still remaining`)
     }
 
-    this.db.prepare(`DELETE FROM allocations WHERE id = ?`).run(id)
+    this.db.prepare(`UPDATE allocations SET is_deleted = 1 WHERE id = ?`).run(id)
   }
 
   // ── Sub Allocations ─────────────────────────────────────────────────────────
@@ -348,7 +371,7 @@ markUsed(id: string, qty: number) {
         (sa.quantity_allocated - sa.quantity_used - sa.quantity_returned) AS quantity_remaining
       FROM sub_allocations sa
       LEFT JOIN allocations a ON a.id = sa.allocation_id
-      WHERE sa.sub_project_id = ?
+      WHERE sa.sub_project_id = ? AND sa.is_deleted = 0
       ORDER BY sa.allocated_at ASC
     `).all(subProjectId) as SubAllocation[]
   }
@@ -406,7 +429,7 @@ markUsed(id: string, qty: number) {
 
     // Check if this sub-project has children — if so, usage must go through children
     const childCount = (this.db.prepare(`
-      SELECT COUNT(*) AS cnt FROM child_projects WHERE parent_id = ?
+      SELECT COUNT(*) AS cnt FROM child_projects WHERE parent_id = ? AND is_deleted = 0
     `).get(sa.sub_project_id) as { cnt: number }).cnt
 
     if (childCount > 0) {
@@ -478,7 +501,7 @@ markUsed(id: string, qty: number) {
     if (remaining > 0) throw new Error(`Cannot delete: ${remaining} still remaining`)
 
     const run = this.db.transaction(() => {
-      this.db.prepare(`DELETE FROM sub_allocations WHERE id = ?`).run(id)
+      this.db.prepare(`UPDATE sub_allocations SET is_deleted = 1 WHERE id = ?`).run(id)
       if (sa.allocation_id) {
         this.db.prepare(`
           UPDATE allocations SET quantity_assigned = quantity_assigned - ? WHERE id = ?
@@ -492,7 +515,6 @@ markUsed(id: string, qty: number) {
   // ── Child Allocations ───────────────────────────────────────────────────────
 
   getChildAllocationsByChildProject(childProjectId: string): ChildAllocation[] {
-    console.log("called");
     
     return this.db.prepare(`
       SELECT
@@ -504,13 +526,13 @@ markUsed(id: string, qty: number) {
         (ca.quantity_allocated - ca.quantity_used - ca.quantity_returned) AS quantity_remaining
       FROM child_allocations ca
       LEFT JOIN allocations a ON a.id = ca.allocation_id
-      WHERE ca.child_project_id = ?
+      WHERE ca.child_project_id = ? AND ca.is_deleted = 0
       ORDER BY ca.allocated_at ASC
     `).all(childProjectId) as ChildAllocation[]
   }
 
   getChildAllocationById(id: string): ChildAllocation | undefined {
-    return this.db.prepare(`SELECT * FROM child_allocations WHERE id = ?`).get(id) as ChildAllocation | undefined
+    return this.db.prepare(`SELECT * FROM child_allocations WHERE id = ? AND is_deleted = 0`).get(id) as ChildAllocation | undefined
   }
 
   /**
@@ -627,7 +649,7 @@ markUsed(id: string, qty: number) {
     if (remaining > 0) throw new Error(`Cannot delete: ${remaining} still remaining`)
 
     const run = this.db.transaction(() => {
-      this.db.prepare(`DELETE FROM child_allocations WHERE id = ?`).run(id)
+      this.db.prepare(`UPDATE child_allocations SET is_deleted = 1 WHERE id = ?`).run(id)
       this.db.prepare(`
         UPDATE sub_allocations SET quantity_assigned = quantity_assigned - ? WHERE id = ?
       `).run(ca.quantity_allocated, ca.parent_id)
@@ -652,13 +674,13 @@ markUsed(id: string, qty: number) {
 
     this.db.prepare(`UPDATE sub_projects SET status = 'completed' WHERE id = ?`).run(subProjectId)
 
-    const subProject = this.db.prepare(`SELECT * FROM sub_projects WHERE id = ?`).get(subProjectId) as { project_id: string } | undefined
+    const subProject = this.db.prepare(`SELECT * FROM sub_projects WHERE id = ? AND is_deleted = 0`).get(subProjectId) as { project_id: string } | undefined
     if (subProject) this._checkAndCompleteProject(subProject.project_id)
   }
 
   private _checkAndCompleteProject(projectId: string): void {
     const subs = this.db.prepare(`
-      SELECT status FROM sub_projects WHERE project_id = ?
+      SELECT status FROM sub_projects WHERE project_id = ?  AND is_deleted = 0
     `).all(projectId) as { status: string }[]
 
     if (subs.length === 0) return
@@ -678,52 +700,109 @@ export class ChildProjectsRepository {
   }
 
   updateStatus(id:string, status:string){
-    const child = this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(id) as any;
+
+
+    
+    const child = this.db.prepare(`SELECT * FROM child_projects WHERE id = ? AND is_deleted = 0`).get(id) as any;
     if(!child) throw new Error ("Child project not found")
-    this.db.prepare(`UPDATE child_projects SET status = ? WHERE id = ?`).run(status, id)
-      return this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(id) as any;
+
+      const currentStatus = child.status;
+      if(currentStatus === "completed" && status !== "completed") {
+      
+        const run =  this.db.transaction(()=>{
+          this.db.prepare(`UPDATE sub_projects SET status = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(status, child.parent_id)
+          this.db.prepare(`UPDATE child_projects SET status = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(status, id)
+          return this.db.prepare(`SELECT * FROM child_projects WHERE id = ? AND is_deleted = 0`).get(id) as any;
+        })
+
+        run();
+        
+      } 
+    this.db.prepare(`UPDATE child_projects SET status = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(status, id)
+      return this.db.prepare(`SELECT * FROM child_projects WHERE id = ? AND is_deleted = 0`).get(id) as any;
   }
   getBySubProject(subId: string): any[] {
     return this.db.prepare(`
       SELECT * FROM child_projects
-      WHERE parent_id = ?
+      WHERE parent_id = ? AND is_deleted = 0
+      ORDER BY created_at ASC
+    `).all(subId) as any[]
+  }
+  getIncompleteChildProjectsBySubProject(subId: string): any[] {
+    return this.db.prepare(`
+      SELECT * FROM child_projects
+      WHERE parent_id = ? AND is_deleted = 0 AND status != 'completed'
       ORDER BY created_at ASC
     `).all(subId) as any[]
   }
   delete(childId: string){
-    const child = this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(childId) as any;
+    const child = this.db.prepare(`SELECT * FROM child_projects WHERE id = ? AND is_deleted = 0`).get(childId) as any;
     if(!child) throw new Error ("Child project not found")
-      const childAllocs = this.db.prepare(`SELECT * FROM child_allocations WHERE child_project_id = ?`).all(childId) as any[];
+      const childAllocs = this.db.prepare(`SELECT * FROM child_allocations WHERE child_project_id = ? AND is_deleted = 0`).all(childId) as any[];
       if(childAllocs.length > 0) throw new Error("Cannot delete child project with existing allocations. Please delete allocations first.")
-     this.db.prepare(`DELETE FROM child_projects WHERE id = ?`).run(childId);
-    const result = this.db.prepare(`DELETE FROM child_projects WHERE id = ?`).run(childId);
-    return { success: result.changes > 0 }
+    console.log("Preparing to deducu in child delete")
+
+        const run = this.db.transaction(()=>{
+          const deleteResult = this.db.prepare(`UPDATE child_projects SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(childId)
+          const deductAmount = child.contract_value ?? 0;
+          this.db.prepare(`UPDATE sub_projects SET contract_value = contract_value - ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(deductAmount, child.parent_id)
+          this.db.prepare(`UPDATE projects SET contract_value = contract_value - ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(deductAmount, child.project_id)
+          return deleteResult;
+      })
+      const result = run();
+ 
+    return { success: result?.changes > 0 }
   }
 
-  create(input:any){
-    console.log("Create child with ", input);
-      const id = randomUUID();
+  update (id:string,input:SubProject){
+     const childProject = this.db.prepare(`SELECT * FROM child_projects WHERE id = ? AND is_deleted = 0`).get(id!) as SubProject | undefined
+    if(!childProject) throw new Error("Child Project Not Found")
+      const currentContractValue = Number(childProject.contract_value);
+      const run = this.db.transaction(()=>{
+        this.db.prepare(`UPDATE child_projects SET title = ?, location = ?, contract_value = ?, notes = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0` ).run(input.title ?? null, input.location ?? null, input.contract_value ?? 0, input.notes, id);
+        if(Number(childProject.contract_value ?? 0) === Number(input.contract_value ?? 0)) return
 
-  this.db.prepare(`
-    INSERT INTO child_projects
-      (id, parent_id, project_id, title, location, notes, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
-    input.parent_id,
-    input.project_id,
-    input.title,
-    input.location,
-    input.notes ?? null,
-    'pending'
-  );
-    const all = this.db.prepare(`SELECT * FROM child_projects
-      WHERE parent_id = ?
-      ORDER BY created_at ASC`).all(input.parent_id) as any[];
+        this.db.prepare(`UPDATE sub_projects SET contract_value = contract_value - ? + ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(currentContractValue ?? 0, input.contract_value ?? 0, childProject.parent_id)
 
-      console.log("all chikds arew ",all );
-      
-    
+        this.db.prepare(`UPDATE projects SET contract_value = contract_value - ? + ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(currentContractValue ?? 0, input.contract_value ?? 0, childProject.project_id)
+          
+    })
+    run()
+
   }
+
+  create(input: { parent_id: string; project_id: string; title: string; location: string; contract_value: number | string; notes?: string }) {
+  const id = randomUUID();
+  const contractValue = parseFloat(String(input.contract_value)) || 0;
+
+  const run = this.db.transaction(() => {
+    this.db.prepare(`
+      INSERT INTO child_projects
+        (id, parent_id, project_id, title, location, contract_value, notes, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.parent_id,
+      input.project_id,
+      input.title,
+      input.location,
+      contractValue,
+      input.notes ?? null,
+      'pending'
+    );
+
+    this.db.prepare(`
+      UPDATE sub_projects SET contract_value = contract_value + ?, is_synced = 0 WHERE id = ? AND is_deleted = 0
+    `).run(contractValue, input.parent_id);
+    this.db.prepare(`UPDATE projects SET contract_value = contract_value + ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(contractValue, input.project_id)
+  });
+
+  run();
+
+   return this.db.prepare(`SELECT * FROM child_projects WHERE id = ?`).get(id);
+}
+getById(id:string):SubProject {
+  return this.db.prepare(`SELECT * FROM child_projects WHERE id = ? AND is_deleted = 0`).get(id) as SubProject 
+}
 }
 

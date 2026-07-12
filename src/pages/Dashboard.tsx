@@ -1,10 +1,3 @@
-// src/pages/Dashboard.tsx
-// ─────────────────────────────────────────────────────────────
-// The dashboard fetches from every module in parallel using
-// Promise.all(). This means all queries run simultaneously
-// instead of waiting for each one to finish before starting
-// the next. Much faster for a page with many data sources.
-// ─────────────────────────────────────────────────────────────
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -42,9 +35,6 @@ export default function Dashboard() {
     const load = async () => {
       setLoading(true)
       try {
-        // WHY Promise.all?
-        //   Without it: request 1 finishes → request 2 starts → ... = slow
-        //   With it:    all requests start at the same time = fast
         const [
           projectsRes,
           lowStockRes,
@@ -68,7 +58,7 @@ export default function Dashboard() {
           lowStockItems:  lowStockRes.success  ? (lowStockRes.data ?? []).slice(0, 5) : [],
           outstanding:    outstandingRes.success ? outstandingRes.data : { total_due: 0, total_paid: 0, total_remaining: 0 },
           recentProjects: projectsRes.success
-            ? [] // loaded separately below
+            ? [] 
             : [],
           recentInvoices: invoicesRes.success
             ? (invoicesRes.data ?? []).filter((i: any) => i.payment_status !== 'paid').slice(0, 5)
@@ -78,7 +68,6 @@ export default function Dashboard() {
           itemCount:   itemsRes.success   ? (itemsRes.data ?? []).length   : 0,
         })
 
-        // Load recent projects separately to get client names
         const recentRes = await window.api.projects.getAll()
         if (recentRes.success) {
           setData(prev => prev ? ({
@@ -145,7 +134,7 @@ export default function Dashboard() {
             Rs {data.outstanding.total_remaining.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
           </p>
           <p style={s.finSub}>
-            Rs {data.outstanding.total_paid.toLocaleString('en-LK', { minimumFractionDigits: 2 })} collected of Rs {data.outstanding.total_due.toLocaleString('en-LK', { minimumFractionDigits: 2 })} invoiced
+            <strong>Rs {data.outstanding.total_paid.toLocaleString('en-LK', { minimumFractionDigits: 2 })} </strong> collected of  <strong>Rs {data.outstanding.total_due.toLocaleString('en-LK', { minimumFractionDigits: 2 })} </strong> invoiced
           </p>
           {data.outstanding.total_due > 0 && (
             <div style={s.progressTrack}>
@@ -156,14 +145,14 @@ export default function Dashboard() {
 
         {/* Project status breakdown */}
         <div style={s.finCard}>
-          <p style={s.finLabel}>Projects by status</p>
+          <p style={s.finLabel}>Projects by Status</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
             {(['active', 'pending', 'completed', 'cancelled'] as const).map(status => {
               const count = data.projectCounts[status] ?? 0
               const pct   = totalProjects > 0 ? (count / totalProjects) * 100 : 0
               return (
                 <div key={status}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 3 }}>
                     <span style={{ textTransform: 'capitalize', color: '#afc2e4' }}>{status}</span>
                     <span style={{ fontWeight: 500, color: '#afc2e4' }}>{count}</span>
                   </div>
@@ -177,17 +166,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Bottom two columns ───────────────────────────── */}
       <div style={s.bottomRow}>
 
         {/* Recent projects */}
         <div style={s.panel}>
           <div style={s.panelHeader}>
-            <p style={s.panelTitle}>Recent projects</p>
+            <p style={s.panelTitle}>Recent Projects</p>
             <button style={s.linkBtn} onClick={() => navigate('/projects')}>View all →</button>
           </div>
           {data.recentProjects.length === 0
-            ? <p style={s.empty}>No projects yet</p>
+            ? <p style={s.empty}>No Projects Yet</p>
             : data.recentProjects.map(p => (
               <div key={p.id} style={s.listRow}>
                 <div style={{ flex: 1 }}>
@@ -195,7 +183,7 @@ export default function Dashboard() {
                   <p style={s.rowSub}>{p.client_name}</p>
                 </div>
                 <span style={{ ...s.dot, background: STATUS_COLORS[p.status] }} />
-                <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'capitalize' }}>{p.status}</span>
+                <span style={{ fontSize: 12, color: '#6b7280', textTransform: 'capitalize' }}>{p.status}</span>
               </div>
             ))
           }
@@ -260,7 +248,6 @@ export default function Dashboard() {
   )
 }
 
-// ── Reusable stat card ────────────────────────────────────────
 function StatCard({ label, value, total, sub, subColor, color, onClick }: {
   label: string; value: number; total?: string; sub?: string
   subColor?: string; color: string; onClick?: () => void
@@ -278,7 +265,6 @@ function StatCard({ label, value, total, sub, subColor, color, onClick }: {
   )
 }
 
-// ── Styles ────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
   page: { margin: '0 auto' },
 
@@ -330,7 +316,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   statSub: {
-    fontSize: 15,
+    fontSize: 16,
     color: 'var(--text-dim)',
     marginTop: 4
   },
@@ -351,7 +337,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   finLabel: {
-    fontSize: 15,
+    fontSize: 18,
     color: 'var(--text-muted)',
     margin: '0 0 6px',
     fontWeight: 500
@@ -365,7 +351,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   finSub: {
-    fontSize: 14,
+    fontSize: 18,
     color: 'var(--text-dim)',
     margin: 0
   },
@@ -408,7 +394,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   panelTitle: {
-    fontSize: 13,
+    fontSize: 18,
     fontWeight: 600,
     margin: 0,
     display: 'flex',
@@ -418,7 +404,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   linkBtn: {
-    fontSize: 12,
+    fontSize: 16,
     color: 'var(--primary)',
     background: 'none',
     border: 'none',
@@ -427,7 +413,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   empty: {
-    fontSize: 13,
+    fontSize: 15,
     color: 'var(--text-dim)',
     padding: '12px 0'
   },
@@ -442,28 +428,28 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   rowTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: 500,
     margin: 0,
     color: 'var(--text)'
   },
 
   rowSub: {
-    fontSize: 11,
+    fontSize: 14,
     color: 'var(--text-dim)',
     margin: '2px 0 0'
   },
 
   dot: {
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
     borderRadius: '50%',
     flexShrink: 0
   },
 
   // ── Badges
   alertBadge: {
-    fontSize: 10,
+    fontSize: 14,
     padding: '1px 6px',
     borderRadius: 10,
     background: 'var(--danger-bg)',
@@ -472,7 +458,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   lowBadge: {
-    fontSize: 11,
+    fontSize: 14,
     padding: '2px 8px',
     borderRadius: 10,
     background: 'var(--danger-bg)',
@@ -482,7 +468,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   badge: {
-    fontSize: 11,
+    fontSize: 14,
     padding: '2px 8px',
     borderRadius: 10,
     fontWeight: 500,

@@ -15,6 +15,9 @@ import ProjectDetail from './pages/ProjectDetail'
 
 import { ToastContainer } from 'react-toastify';
 import { QuotationForm } from './pages/QuotationForm'
+import ProjectAnalytics from './pages/ProjectAnalytics'
+import Settings from './pages/Settings'
+import Ledger from './pages/Ledger'
 
 
 // ── Inner app — only renders after auth check ──────────────────
@@ -43,10 +46,13 @@ function AppRoutes() {
           <Route path="/clients"    element={<Clients />} />
           <Route path="/projects"   element={<Projects />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
+          <Route path="/projects/project-analytics/:id" element={<ProjectAnalytics />} />
           <Route path="/inventory"  element={<Inventory />} />
           <Route path="/quotations" element={<Quotations />} />
           <Route path="/paysheets"  element={<Paysheets />} />
           <Route path="/invoices"   element={<Invoices />} />
+          <Route path="/ledger"   element={<Ledger />} />
+          <Route path="/settings"   element={<Settings />} />
           <Route path="/create-quotation"   element={<QuotationForm />} />
         </Route>
       </Routes>

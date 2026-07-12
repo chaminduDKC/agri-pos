@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'react-toastify'
 
 export interface Client {
     id: string
@@ -36,12 +37,13 @@ const refresh = useCallback(async () => {
       }
     } catch (err: any) {
       setError(err.message)
+      toast.error(err?.message)
     } finally {
       setLoading(false)
     }
   }, [])
-
-
+  
+  
   const search = useCallback(async (query:string)=>{
     console.log(query);
     
@@ -49,41 +51,48 @@ const refresh = useCallback(async () => {
     try {
       const res = await window.api.clients.search(query)
       if (res.success) setClients(res.data ?? [])
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }, [refresh])
+      } catch (err: any) {
+    setError(err.message)
+    toast.error(err?.message)
+    
+  }
+}, [refresh])
 
-    // ── Create ─────────────────────────────────────────────────
-  // Returns the created client so the form can close confidently,
-  // or returns an error string if something went wrong.
-  const createClient = useCallback(async (input: ClientInput): Promise<string | null> => {
-    const res = await window.api.clients.create(input)
-    if (res.success) {
-      // Prepend to list — newest first, no re-fetch needed
-      setClients(prev => [{ ...res.data, project_count: 0 }, ...prev])
-      return null // null = no error
-    }
-    return res.error ?? 'Failed to create client'
-  }, [])
+// ── Create ─────────────────────────────────────────────────
+// Returns the created client so the form can close confidently,
+// or returns an error string if something went wrong.
+const createClient = useCallback(async (input: ClientInput) => {
+  const res = await window.api.clients.create(input)
+  if (res.success) {
+    toast.success("Client created successfully")
+    setClients(prev => [{ ...res.data, project_count: 0 }, ...prev])
+    return {sucess:true} // null = no error
+  }
+  toast.error(res.error ?? "Failed to create client")
+  return res.error ?? 'Failed to create client'
+}, [])
 
-  // ── Update ─────────────────────────────────────────────────
-  const updateClient = useCallback(async (id: string, input: ClientInput): Promise<string | null> => {
-    const res = await window.api.clients.update(id, input)
-    if (res.success) {
-      setClients(prev => prev.map(c => c.id === id ? { ...c, ...res.data } : c))
-      return null
-    }
-    return res.error ?? 'Failed to update client'
-  }, [])
+// ── Update ─────────────────────────────────────────────────
+const updateClient = useCallback(async (id: string, input: ClientInput) => {
+  const res = await window.api.clients.update(id, input)
+  if (res.success) {
+    toast.success("Client updated successfully")
+    setClients(prev => prev.map(c => c.id === id ? { ...c, ...res.data } : c))
+    return {sucess:true}
+  }
+  toast.error(res.error ?? "Failed to update client")
+  return res.error ?? 'Failed to update client'
+}, [])
 
-  // ── Delete ─────────────────────────────────────────────────
-  const deleteClient = useCallback(async (id: string): Promise<string | null> => {
-    const res = await window.api.clients.delete(id)
-    if (res.success) {
-      setClients(prev => prev.filter(c => c.id !== id))
-      return null
-    }
+// ── Delete ─────────────────────────────────────────────────
+const deleteClient = useCallback(async (id: string) => {
+  const res = await window.api.clients.delete(id)
+  if (res.success) {
+    toast.success("Client deleted successfully")
+    setClients(prev => prev.filter(c => c.id !== id))
+    return {sucess:true}
+  }
+  toast.error(res.error ?? "Failed to delete client")
     return res.error ?? 'Failed to delete client'
   }, [])
 

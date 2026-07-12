@@ -1,10 +1,28 @@
 // src/pages/Paysheets.tsx
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'react-toastify';
 
-interface Worker { id: string; user_name: string; daily_rate: number; nic: string | null; phone: string | null }
+interface Worker { id: string; user_name: string; daily_rate: number; fixed_salary: number ; overtime_rate:number; nic: string | null; phone: string | null }
 interface AttendanceRecord { id: string; worker_id: string; worker_name: string; project_title: string; work_date: string; status: string; hours_worked: number; overtime_hours: number }
-interface Paysheet { id: string; worker_id: string; worker_name: string; project_title: string | null; period_start: string; period_end: string; total_days: number; daily_rate: number; overtime_pay: number; total_amount: number; status: string; created_at: string }
+interface Paysheet { 
+  id: string; worker_id: string; worker_name: string; 
+  project_title: string | null; fixed_salary:number; period_start: string; 
+  overtime_hours:number; overtime_rate:number;present_days:number; absent_days:number; half_days:number; salary_advance:number
+  period_end: string; total_days: number; daily_rate: number; overtime_pay: number; 
+  total_amount: number; status: string; created_at: string }
 interface Summary { total_days: number; total_overtime: number; present_days: number; absent_days: number; half_days: number }
+export interface WorkerPayment {
+  amount: number;
+  child_project_id: string | null;
+  created_at: string;
+  date_paid: string;
+  expense_log_id: string;
+  id: string;
+  is_deleted: number;
+  is_synced: number;
+  sub_project_id: string;
+  worker_id: string;
+}
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   draft:    { bg: '#f3f4f6', color: '#374151' },
@@ -12,17 +30,20 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   paid:     { bg: '#dbeafe', color: '#1e40af' },
 }
 
+interface AttendanceDetails{
+  overtime_hours:number | 0
+}
 export default function Paysheets() {
   const [tab, setTab]             = useState<'paysheets' | 'attendance' | 'workers'>('paysheets')
   const [workers, setWorkers]     = useState<Worker[]>([])
-  const [projects, setProjects]   = useState<{ id: string; title: string }[]>([])
+  const [projects, setProjects]   = useState<{ id: string; title: string ; date:string}[]>([])
   const [paysheets, setPaysheets] = useState<Paysheet[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [loading, setLoading]     = useState(true)
 
   // Worker form
   const [showWorkerForm, setShowWorkerForm] = useState(false)
-  const [workerForm, setWorkerForm] = useState({ name: '', daily_rate: 0, nic: '', phone: '', address: '' })
+  const [workerForm, setWorkerForm] = useState({ name: '', daily_rate: 0, nic: '', phone: '', address: '', fixed_salary:0, overtime_rate:0 })
   const [workerErr, setWorkerErr]   = useState<string | null>(null)
 
   // Attendance form
@@ -34,7 +55,9 @@ export default function Paysheets() {
   const [genForm, setGenForm] = useState({ worker_id: '', project_id: '', period_start: '', period_end: '' })
   const [genSummary, setGenSummary] = useState<Summary | null>(null)
   const [genErr, setGenErr]   = useState<string | null>(null)
-  const [workerId, setWorkerId] = useState<string>("")
+
+  const [workerPayments, setWorkerPayments] = useState<WorkerPayment[]>()
+  const [attendanceDetails, setAttendaceDetails] = useState<AttendanceDetails[]>();
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -44,8 +67,8 @@ export default function Paysheets() {
       window.api.paysheets.getAll(),
     ])
     if (w.success) console.log(w.data);  setWorkers(w.data ?? [])
-    if (p.success)  setProjects(p.data ?? [])
-    if (ps.success) setPaysheets(ps.data ?? [])
+    if (p.success)  {setProjects(p.data ?? []); console.log(p.data)}
+    if (ps.success) {setPaysheets(ps.data ?? []); console.log(ps.data)}
     setLoading(false)
   }, [])
 
@@ -62,25 +85,39 @@ export default function Paysheets() {
   // Preview paysheet calculation
   const previewPaysheet = async () => {
     if (!genForm.worker_id || !genForm.period_start || !genForm.period_end) return
+    getAttendanceByWorkerAndPeriod();
+    const workerPaymentsRes = await window.api.expenses.getExpenseLogsByWorker(genForm.worker_id, genForm.period_start, genForm.period_end)
+    console.log("workerPayments");
+    console.log(workerPaymentsRes);
+    setWorkerPayments(workerPaymentsRes?.data)
+    
     const res = await window.api.attendance.getSummary(genForm.worker_id, genForm.period_start, genForm.period_end)
-    if (res.success) setGenSummary(res.data)
+    if (res.success) console.log(res.data);setGenSummary(res.data)
   }
 
   // Save worker
   const saveWorker = async () => {
     if (!workerForm.name.trim())  { setWorkerErr('Name is required'); return }
-    if (!workerForm.daily_rate)   { setWorkerErr('Daily rate is required'); return }
+    if (!workerForm.daily_rate && !workerForm.fixed_salary)   { setWorkerErr('Daily rate or Salary is required'); return }
     const res = await window.api.workers.create(workerForm)
-    if (res.success) { setShowWorkerForm(false); setWorkerForm({ name:'', daily_rate:0, nic:'', phone:'', address:'' }); loadAll() }
-    else setWorkerErr(res.error ?? 'Failed')
+    if (res.success) { toast.success("Worker created successfully"); setShowWorkerForm(false); setWorkerForm({ name:'', daily_rate:0, nic:'', phone:'', address:'' , fixed_salary:0, overtime_rate:0}); loadAll() }
+    else {
+      setWorkerErr(res.error ?? 'Failed')
+      toast.error("Failed to create worker")
+    }
   }
 
+  const clearForm = ()=>{
+    setAttForm({worker_id:"", project_id:"", overtime_hours:0, status:"", work_date:""});
+  }
   // Mark attendance
   const markAttendance = async () => {
     if (!attForm.worker_id)  { setAttErr('Select a worker'); return }
     if (!attForm.project_id) { setAttErr('Select a project'); return }
     const res = await window.api.attendance.mark(attForm)
     if (res.success) {
+      toast.success("Attendance marked successfully")
+      clearForm()
       setAttErr(null)
       if (attProject === attForm.project_id) {
         window.api.attendance.getByProject(attProject).then(r => { if (r.success) setAttendance(r.data ?? []) })
@@ -88,22 +125,44 @@ export default function Paysheets() {
     } else setAttErr(res.error ?? 'Failed')
   }
 
+  const getAttendanceByWorkerAndPeriod = async ()=>{
+    if (!genForm.worker_id || !genForm.period_start || !genForm.period_end) return
+    const res = await window.api.attendance.getByWorkerAndPeriod(genForm.worker_id, genForm.period_start, genForm.period_end);
+    if(res.success){
+      console.log("res.data")
+      console.log(res.data)
+      setAttendaceDetails(res.data)
+    }
+
+  }
+  const overtimeHours = attendanceDetails?.reduce((total, rec)=> total + rec.overtime_hours, 0)
   // Generate paysheet
   const generatePaysheet = async () => {
     if (!genSummary) { setGenErr('Preview the summary first'); return }
     const worker = workers.find(w => w.id === genForm.worker_id)
     if (!worker) return
-    const overtime_pay = genSummary.total_overtime * (worker.daily_rate / 8) * 1.5
-    const total = (genSummary.total_days * worker.daily_rate) + overtime_pay
+    const overtime_pay = worker.overtime_rate * genSummary.total_overtime
+    const total = worker.fixed_salary ? worker.fixed_salary + (overtime_pay) : (worker.daily_rate * genSummary.total_days) + overtime_pay;
+    console.log(genSummary)
+    console.log(overtime_pay)
+    console.log(total)
+    
     const res = await window.api.paysheets.create({
       worker_id:    genForm.worker_id,
-      project_id:   genForm.project_id || undefined,
+      project_id:   genForm.project_id || null,
       period_start: genForm.period_start,
       period_end:   genForm.period_end,
       total_days:   genSummary.total_days,
+      half_days : genSummary?.half_days,
+      absent_days: genSummary?.absent_days,
+      present_days: genSummary?.present_days,
+      salary_advance : salaryAdvance,
       daily_rate:   worker.daily_rate,
-      overtime_pay: Math.round(overtime_pay * 100) / 100,
-      total_amount: Math.round(total * 100) / 100,
+      overtime_rate:worker.overtime_rate,
+      overtime_hours:overtimeHours,
+      fixed_salary: worker.fixed_salary,
+      overtime_pay: overtimeHours ? worker.overtime_rate * overtimeHours : 0,
+      total_amount: total ,
     })
     if (res.success) {
       setPaysheets(prev => [res.data, ...prev])
@@ -130,8 +189,16 @@ export default function Paysheets() {
       else alert(res.error)
   }
   const selectedWorker = workers.find(w => w.id === genForm.worker_id)
-  const overtimePay    = genSummary ? genSummary.total_overtime * ((selectedWorker?.daily_rate ?? 0) / 8) * 1.5 : 0
-  const totalAmount    = genSummary ? (genSummary.total_days * (selectedWorker?.daily_rate ?? 0)) + overtimePay : 0
+  const overtimePay    = genSummary && selectedWorker && selectedWorker?.overtime_rate * genSummary?.total_overtime
+  const salaryAdvance  = workerPayments?.reduce((total, payment)=> total + payment.amount, 0)
+  const totalAmount    = (selectedWorker?.fixed_salary ? selectedWorker.fixed_salary + overtimePay!  :  genSummary ? (genSummary.total_days * (selectedWorker?.daily_rate ?? 0)) + overtimePay! : 0) - salaryAdvance!
+
+
+
+  const generatePdf = async (ps:Paysheet)=>{
+    console.log(ps)
+    const res = await window.api.generatePaysheetPdf(ps)
+  }
 
   if (loading) return <p style={{ padding: 32, color: '#888' }}>Loading...</p>
 
@@ -187,24 +254,40 @@ export default function Paysheets() {
             {/* Preview summary */}
             {genSummary && selectedWorker && (
               <div style={s.summary}>
-                <div style={s.summaryRow}><span>Present days</span><strong>{genSummary.present_days}</strong></div>
-                <div style={s.summaryRow}><span>Half days</span><strong>{genSummary.half_days}</strong></div>
-                <div style={s.summaryRow}><span>Absent days</span><strong>{genSummary.absent_days}</strong></div>
-                <div style={s.summaryRow}><span>Total payable days</span><strong>{genSummary.total_days}</strong></div>
-                <div style={s.summaryRow}><span>Overtime hours</span><strong>{genSummary.total_overtime}h</strong></div>
-                <div style={{ ...s.summaryRow, borderTop: '1px solid #e5e7eb', paddingTop: 8, marginTop: 4 }}>
-                  <span>Base pay ({genSummary.total_days} × Rs {selectedWorker.daily_rate})</span>
-                  <strong>Rs {(genSummary.total_days * selectedWorker.daily_rate).toFixed(2)}</strong>
-                </div>
-                <div style={s.summaryRow}>
-                  <span>Overtime pay</span>
-                  <strong>Rs {overtimePay.toFixed(2)}</strong>
-                </div>
-                <div style={{ ...s.summaryRow, fontSize: 15, fontWeight: 700 }}>
-                  <span>Total</span>
-                  <span>Rs {totalAmount.toFixed(2)}</span>
-                </div>
-              </div>
+  <div style={s.summaryRow}><span>Present days</span><strong>{genSummary.present_days}</strong></div>
+  <div style={s.summaryRow}><span>Half days</span><strong>{genSummary.half_days}</strong></div>
+  <div style={s.summaryRow}><span>Absent days</span><strong>{genSummary.absent_days}</strong></div>
+  <div style={s.summaryRow}><span>Total payable days</span><strong>{genSummary.total_days}</strong></div>
+  <div style={s.summaryRow}><span>Overtime hours</span><strong>{genSummary.total_overtime}h</strong></div>
+  <div style={{ ...s.summaryRow, borderTop: '1px solid #374151', paddingTop: 8, marginTop: 4 }}>
+    {selectedWorker.fixed_salary ? (
+      <span>Fixed salary</span>
+    ) : (
+      <span>Base pay ({genSummary.total_days} × Rs {selectedWorker.daily_rate})</span>
+    )}
+    <strong>
+      Rs {(selectedWorker.fixed_salary ? selectedWorker.fixed_salary : genSummary.total_days * selectedWorker.daily_rate ).toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}
+    </strong>
+  </div>
+  <div style={s.summaryRow}>
+    <span>Overtime pay</span>
+    <strong>Rs {overtimePay?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>
+  </div>
+
+<div style={s.summaryRow}>
+    <strong>Deductions</strong>
+  </div>
+
+  <div style={s.summaryRow}>
+    <span>Salary Advance</span>
+    <strong>Rs {salaryAdvance?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>
+  </div>
+
+  <div style={{ ...s.summaryRow, fontSize: 15,borderTop: '1px solid #374151', fontWeight: 700 }}>
+    <span>Total</span>
+    <span>Rs {totalAmount.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+  </div>
+</div>
             )}
           </div>
 
@@ -215,7 +298,7 @@ export default function Paysheets() {
               <div style={s.tableWrap}>
                 <table style={s.table}>
                   <thead>
-                    <tr>{['Worker','Project','Period','Days','Rate','Overtime','Total','Status','Delete'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                    <tr>{['Worker','Period','Days','Daily rate or Fixed Salary','OT Hours','OT rate','Present','Absent','Half','Advance', "Net Salary", 'Status', 'Action', 'PDF'].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
                     {paysheets.map(ps => {
@@ -223,12 +306,17 @@ export default function Paysheets() {
                       return (
                         <tr key={ps.id}>
                           <td style={s.td}><strong>{ps.worker_name}</strong></td>
-                          <td style={s.td}>{ps.project_title ?? <span style={{ color:'#d1d5db' }}>—</span>}</td>
+                          
                           <td style={s.td}><span style={{ fontSize:12 }}>{ps.period_start} → {ps.period_end}</span></td>
                           <td style={s.td}>{ps.total_days}</td>
-                          <td style={s.td}>Rs {ps.daily_rate}</td>
-                          <td style={s.td}>Rs {ps.overtime_pay.toFixed(2)}</td>
-                          <td style={{ ...s.td, fontWeight:600 }}>Rs {ps.total_amount.toFixed(2)}</td>
+                          <td style={s.td}>Rs {(ps.daily_rate === 0 ? ps.fixed_salary : ps.daily_rate).toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                          <td style={s.td}>{ps.overtime_hours ?? 0}</td>
+                          <td style={s.td}>Rs {ps.overtime_rate?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                          <td style={s.td}>{ps.present_days ?? 0}</td>
+                          <td style={s.td}>{ps.absent_days ?? 0}</td>
+                          <td style={s.td}>{ps.half_days ?? 0}</td>
+                          <td style={{ ...s.td, fontWeight:600 }}>Rs {ps.salary_advance?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+                          <td style={{ ...s.td, fontWeight:600 }}>Rs {(ps.total_amount - ps.salary_advance).toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</td>
                           <td style={s.td}>
                             <select value={ps.status} onChange={e => updatePaysheetStatus(ps.id, e.target.value)}
                               style={{ fontSize:11, padding:'3px 8px', borderRadius:12, background: sc.bg, color: sc.color, border:'none', cursor:'pointer', appearance:'none' }}>
@@ -240,6 +328,7 @@ export default function Paysheets() {
                               <button style={{ ...s.btnSm, color:'#dc2626' }} onClick={() => deletePaysheet(ps.id)}>Delete</button>
                             }
                           </td>
+                          <td style={s.td}><button onClick={()=> generatePdf(ps)}>Generate PDF</button></td>
                         </tr>
                       )
                     })}
@@ -298,12 +387,21 @@ export default function Paysheets() {
           </div>
 
           {/* Attendance log by project */}
+          <div style={{display:"flex", gap:40}}>
           <div style={{ marginBottom: 12 }}>
             <label style={s.label}>View attendance for project</label>
             <select style={{ ...s.input, maxWidth: 320 }} value={attProject} onChange={e => setAttProject(e.target.value)}>
               <option value="">Select project...</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
             </select>
+          </div>
+           <div style={{ marginBottom: 12 }}>
+            <label style={s.label}>View attendance for date</label>
+            <select style={{ ...s.input, maxWidth: 320 }} value={attProject} onChange={e => setAttProject(e.target.value)}>
+              <option value="">Select project...</option>
+              {attendance.map(p => <option key={p.id} value={p.id}>{p.work_date}</option>)}
+            </select>
+          </div>
           </div>
 
           {attendance.length > 0 && (
@@ -350,6 +448,10 @@ export default function Paysheets() {
           </div>
 
           {showWorkerForm && (
+
+            <div style={s.overlay} onClick={()=> {setShowWorkerForm(false)}}>
+          <div style={s.modal} onClick={e => e.stopPropagation()}>
+
             <div style={{ ...s.panel, marginBottom: 16 }}>
               <p style={s.panelTitle}>New worker</p>
               {workerErr && <p style={s.err}>{workerErr}</p>}
@@ -359,8 +461,17 @@ export default function Paysheets() {
                   <input style={s.input} value={workerForm.name} autoFocus onChange={e => setWorkerForm(f => ({ ...f, name: e.target.value }))} />
                 </div>
                 <div>
+                  <label style={s.label}>Fixed Salary (Rs) *</label>
+                  <input style={s.input} type="number" value={workerForm.fixed_salary} onChange={e => setWorkerForm(f => ({ ...f, fixed_salary: parseFloat(e.target.value) || 0 }))} />
+                </div>
+                <div>
                   <label style={s.label}>Daily rate (Rs) *</label>
-                  <input style={s.input} type="number" value={workerForm.daily_rate} onChange={e => setWorkerForm(f => ({ ...f, daily_rate: parseFloat(e.target.value) || 0 }))} />
+                  <input disabled={workerForm.fixed_salary ? true : false } style={s.input} type="number" value={workerForm.daily_rate} onChange={e => setWorkerForm(f => ({ ...f, daily_rate: parseFloat(e.target.value) || 0 }))} />
+                </div>
+
+                <div>
+                  <label style={s.label}>Overtime rate (Rs) *</label>
+                  <input style={s.input} type="number" value={workerForm.overtime_rate} onChange={e => setWorkerForm(f => ({ ...f, overtime_rate: parseFloat(e.target.value) || 0 }))} />
                 </div>
                 <div>
                   <label style={s.label}>NIC</label>
@@ -382,18 +493,22 @@ export default function Paysheets() {
                 <button style={s.btnSm} onClick={() => setShowWorkerForm(false)}>Cancel</button>
               </div>
             </div>
+            </div>
+            </div>
           )}
 
           <div style={s.tableWrap}>
             <table style={s.table}>
               <thead>
-                <tr>{['Name','Daily rate','NIC','Phone', ''].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                <tr>{['Name','Daily rate', "Fixed Salary", "Overtime Rate", 'NIC','Phone', ''].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {workers.map(w => (
                   <tr key={w.id}>
-                    <td style={s.td}><strong>{w.user_name}</strong></td>
-                    <td style={s.td}>Rs {w.daily_rate.toLocaleString()}</td>
+                    <td style={s.td}><strong>{w?.user_name }</strong></td>
+                    <td style={s.td}>Rs {w.daily_rate?.toLocaleString()}</td>
+                    <td style={s.td}>Rs {w.fixed_salary?.toLocaleString()}</td>
+                    <td style={s.td}>Rs {w.overtime_rate?.toLocaleString()}</td>
                     <td style={s.td}>{w.nic ?? <span style={{ color:'#d1d5db' }}>—</span>}</td>
                     <td style={s.td}>{w.phone ?? <span style={{ color:'#d1d5db' }}>—</span>}</td>
                     <td style={s.td} onClick={()=> {
@@ -415,7 +530,27 @@ export default function Paysheets() {
 }
 const s: Record<string, React.CSSProperties> = {
   page: { margin: '0 auto' },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100
+  },
 
+  modal: {
+    background: '#232a36',
+    borderRadius: 12,
+    padding: 28,
+    width: '100%',
+    maxWidth: 520,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+    border: '1px solid #2c3443'
+  },
   header: { marginBottom: 16 },
 
   title: {

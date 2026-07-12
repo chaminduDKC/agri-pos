@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { OfflineBanner } from '../components/OfflineBanner'
 
 export default function Login() {
   const { login }         = useAuth()
@@ -16,6 +17,7 @@ export default function Login() {
     setLoading(true); setErr(null)
     const error = await login(email, pass)
     setLoading(false)
+    console.log(error)
     if (error) setErr(error)
     // if no error, AuthContext sets the user and App.tsx renders the app
   }
@@ -29,7 +31,7 @@ export default function Login() {
         <h1 style={s.title}>IrrigaPro</h1>
         <p style={s.sub}>Sign in to continue</p>
 
-        {err && <div style={s.err}>{err}</div>}
+        {err && <div style={s.err}>Login failed</div>}
 
         <label style={s.label}>Email</label>
         <input
@@ -63,6 +65,8 @@ export default function Login() {
           You must be online to sign in.
         </p>
       </div>
+              <OfflineBanner />
+    
     </div>
   )
 }

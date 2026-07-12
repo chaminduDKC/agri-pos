@@ -14,6 +14,8 @@ import { AllocationsRepository, ChildProjectsRepository, SubProjectsRepository }
 import fs from 'fs'
 import { debugToken } from './auth/tokenStore'
 import { request } from './auth/httpClient'
+import { ExpensesRepository } from './database/modules/expenses'
+import { LedgerRepository } from './database/modules/ledger'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -30,7 +32,8 @@ let win: BrowserWindow | null
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
-    width: 1280, height: 800, minWidth: 1000,
+    width: 1280, height: 800, minWidth: 1024,  // ← minimum width
+  minHeight: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -69,6 +72,8 @@ function registerIpcHandlers() {
   const allocations = new AllocationsRepository(db)
   const subProjects = new SubProjectsRepository(db)
   const childProjects = new ChildProjectsRepository(db)
+  const expenses = new ExpensesRepository(db)
+  const ledger = new LedgerRepository(db)
 
   const getAdminId = () => (db.prepare('SELECT id FROM users LIMIT 1').get() as { id: string }).id
 
@@ -125,6 +130,109 @@ function registerIpcHandlers() {
   });
 
 
+    ipcMain.handle('generateInvoicePdf', async (_, data) => {
+    try {
+
+      const res = await request("POST", '/invoice/pdf', data, 'arraybuffer');
+      if (res.status === 401) {
+        return { success: false, error: 'Unauthorized. Please log in again.' }
+      }
+
+      const pdfBuffer = Buffer.from(res);
+
+      const documentsPath = app.getPath("documents")
+      const folderPath = path.join(documentsPath, "Southern-greenhouse", "Invoices")
+
+      await fs.promises.mkdir(folderPath, {recursive:true});
+
+
+      const savePath = path.join(
+        folderPath,
+        `invoice-${Date.now()}.pdf`
+      );
+      
+      await fs.promises.writeFile(savePath, pdfBuffer);
+      await shell.openPath(savePath);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  });
+  
+  ipcMain.handle('generatePaysheetPdf', async (_, data) => {
+    try {
+
+      const res = await request("POST", '/paysheet/pdf', data, 'arraybuffer');
+      if (res.status === 401) {
+        return { success: false, error: 'Unauthorized. Please log in again.' }
+      }
+
+      const pdfBuffer = Buffer.from(res);
+
+      const documentsPath = app.getPath("documents")
+      const folderPath = path.join(documentsPath, "Southern-greenhouse", "Paysheets")
+
+      await fs.promises.mkdir(folderPath, {recursive:true});
+
+
+      const savePath = path.join(
+        folderPath,
+        `paysheet-${Date.now()}.pdf`
+      );
+      
+      await fs.promises.writeFile(savePath, pdfBuffer);
+      await shell.openPath(savePath);
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  });
+
+
+
+
+  ipcMain.handle('getCompanyDetails', async ()=> {
+    try {
+      const res = await request("GET", '/company/details', undefined, "json");
+      if(res.status === 401){
+        return { success: false, error: 'Unauthorized. Please log in again.' }
+      }
+      console.log(res)
+      return {success:true, data:res.data}
+    } catch (error) {
+        return { success: false, error: (error as Error).message };
+    }
+  })
+
+    ipcMain.handle('updateCompanyDetails', async (_,data:any)=> {
+    try {
+      const res = await request("PUT", '/company/details',data, "json");
+      if(res.status === 401){
+        return { success: false, error: 'Unauthorized. Please log in again.' }
+      }
+      console.log(res)
+      return {success:true, data:res.data}
+    } catch (error) {
+        return { success: false, error: (error as Error).message };
+    }
+  })
+
+  // ledgers
+
+  ipcMain.handle('db:ledger:saveDay', (_e, input)=> wrap(()=> ledger.saveDay(input)))
+  ipcMain.handle('db:ledger:getDayByDate', (_e, date)=> wrap(()=> ledger.getDayByDate(date)))
+  ipcMain.handle('db:ledger:getTodayLedgerRecord', (_e, date)=> wrap(()=> ledger.getTodayLedgerRecord(date)))
+  ipcMain.handle('db:ledger:getAllRecords', (_e, pgNumber, pgSize)=> wrap(()=> ledger.getAllRecords(pgNumber, pgSize)))
+
+  // expenses
+
+  ipcMain.handle('db:expenses:createExpenseLog', (_e, input) => wrap(()=> expenses.createExpenseLog(input)) )
+  ipcMain.handle('db:expenses:getExpenseLogsBySubProject', (_e, subProjectId) => wrap(() => expenses.getExpenseLogsBySubProject(subProjectId)))
+  ipcMain.handle('db:expenses:getExpenseLogsByChildProject', (_e, childProjectId) => wrap(() => expenses.getExpenseLogsByChildProject(childProjectId)))
+  ipcMain.handle('db:expenses:getExpenseLogsByWorker', (_e, workerId, startDate, endDate) => wrap(() => expenses.getExpenseLogsByWorker(workerId, startDate, endDate)))
+  ipcMain.handle('db:expenses:getExpenseLogWorkersBySubProject', (_e, subProjectId) => wrap(() => expenses.getExpenseLogWorkersBySubProject(subProjectId)))
+  ipcMain.handle('db:expenses:getExpenseLogWorkersByChildProject', (_e, childProjectId) => wrap(() => expenses.getExpenseLogWorkersByChildProject(childProjectId)))
+  ipcMain.handle('db:expenses:deleteExpenseLog', (_e, expenseLogId) => wrapDelete(() => expenses.deleteExpenseLog(expenseLogId), 'expense log has workers linked to it'))
+  ipcMain.handle('db:expenses:deleteExpenseLogWorker', (_e, expenseLogWorkerId) => wrapDelete(() => expenses.deleteExpenseLogWorker(expenseLogWorkerId), 'expense log worker cannot be deleted'))
+  ipcMain.handle('db:expenses:getSalaryAdvanceByWorkerAndDatePeriod', (_e, startDate, endDate, workerId)=> wrap(()=> expenses.getSalaryAdvanceByWorkerAndDatePeriod(startDate, endDate, workerId)))
 
   // ── Clients ───────────────────────────────────────────────
   ipcMain.handle('db:clients:getAll',  () => wrap(() => clients.getAllWithStats()))
@@ -171,6 +279,7 @@ function registerIpcHandlers() {
   ipcMain.handle('db:projects:getByClient',     (_e, clientId) => wrap(() => projects.getByClient(clientId)))
   ipcMain.handle('db:projects:search',          (_e, q)        => wrap(() => projects.search(q)))
   ipcMain.handle('db:projects:getStatusCounts', () => wrap(() => projects.getStatusCounts()))
+  ipcMain.handle('db:projects:getAllIncompleteProjects', () => wrap(() => projects.getAllIncompleteProjects()))
   ipcMain.handle('db:projects:create',          (_e, input)    => wrap(() => {
     if (!input?.title?.trim())     throw new Error('Project title is required')
     if (!input?.client_id?.trim()) throw new Error('Client is required')
@@ -256,10 +365,12 @@ function registerIpcHandlers() {
 
   // ── Sub-projects ──────────────────────────────────────────
   ipcMain.handle('db:subProjects:getByProject', (_e, projectId) => wrap(() => subProjects.getByProject(projectId)))
+  ipcMain.handle('db:subProjects:getIncompleteSubProjectsByProject', (_e, projectId) => wrap(() => subProjects.getIncompleteSubProjectsByProject(projectId)))
   ipcMain.handle('db:subProjects:create',       (_e, input)     => wrap(() => subProjects.create(input)))
   ipcMain.handle('db:subProjects:updateStatus', (_e, id, status)=> wrap(() => subProjects.updateStatus(id, status)))
   ipcMain.handle('db:subProjects:update',       (_e, id, input) => wrap(() => subProjects.update(id, input)))
   ipcMain.handle('db:subProjects:delete',       (_e, id)        => wrap(() => subProjects.delete(id)))
+  ipcMain.handle('db:subProjects:getById',       (_e, id)        => wrap(() => subProjects.getById(id)))
 
   // ── Allocations ───────────────────────────────────────────
   ipcMain.handle('db:allocations:getByProject',                 (_e, projectId)          => wrap(() => allocations.getByProject(projectId)))
@@ -284,10 +395,17 @@ function registerIpcHandlers() {
 
 // -child projects
   ipcMain.handle('db:childProjects:getBySubProject', (_e, subId)=> wrap(()=> childProjects.getBySubProject(subId)))
+  ipcMain.handle('db:childProjects:getIncompleteChildProjectsBySubProject', (_e, subId)=> wrap(()=> childProjects.getIncompleteChildProjectsBySubProject(subId)))
   ipcMain.handle('db:childProjects:create', (_e, input)=> wrap(()=> childProjects.create(input)))
   ipcMain.handle('db:childProjects:delete', (_e, childId)=> wrap(()=> childProjects.delete(childId)))
   ipcMain.handle('db:childProjects:updateStatus', (_e, childId, status)=> wrap(()=> childProjects.updateStatus(childId, status)))
+  ipcMain.handle('db:childProjects:getById',(_e, id)=> wrap(()=> childProjects.getById(id)) )
+  ipcMain.handle('db:childProjects:update', (_e, id, input)=> wrap(()=> childProjects.update(id, input)))
 }
+// ledger
+
+
+
 
 // ── Helpers ───────────────────────────────────────────────────
 function wrap<T>(fn: () => T): { success: boolean; data?: T; error?: string } {

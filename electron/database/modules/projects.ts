@@ -8,6 +8,7 @@ export interface Project {
   client_id: string
   client_name: string   // joined from clients table
   created_by: string
+  contract_value:number | 0
   title: string
   location: string | null
   status: 'pending' | 'active' | 'completed' | 'cancelled'
@@ -20,6 +21,7 @@ export interface Project {
 export interface ProjectInput {
   client_id: string
   title: string
+  contract_value:number | 0
   location?: string
   status?: string
   start_date?: string
@@ -46,17 +48,21 @@ export class ProjectsRepository {
         c.name AS client_name
       FROM projects p
       JOIN clients c ON c.id = p.client_id
+      WHERE c.is_deleted = 0 AND p.is_deleted = 0
       ORDER BY p.created_at DESC
     `).all() as Project[]
   }
 
+  getAllIncompleteProjects() :Project[]  {
+    return this.db.prepare(`SELECT * FROM projects WHERE is_deleted = 0 AND status != 'completed'`).all() as Project[]
+  }
   // ── GET BY ID ─────────────────────────────────────────────
   getById(id: string): Project | undefined {
     return this.db.prepare(`
       SELECT p.*, c.name AS client_name
       FROM projects p
       JOIN clients c ON c.id = p.client_id
-      WHERE p.id = ?
+      WHERE p.id = ? AND p.is_deleted = 0 AND c.is_deleted = 0
     `).get(id) as Project | undefined
   }
 
@@ -67,7 +73,7 @@ export class ProjectsRepository {
       SELECT p.*, c.name AS client_name
       FROM projects p
       JOIN clients c ON c.id = p.client_id
-      WHERE p.client_id = ?
+      WHERE p.client_id = ? AND p.is_deleted = 0 AND c.is_deleted = 0
       ORDER BY p.created_at DESC
     `).all(clientId) as Project[]
   }
@@ -78,7 +84,7 @@ export class ProjectsRepository {
       SELECT p.*, c.name AS client_name
       FROM projects p
       JOIN clients c ON c.id = p.client_id
-      WHERE p.status = ?
+      WHERE p.status = ? AND p.is_deleted = 0 AND c.is_deleted = 0
       ORDER BY p.created_at DESC
     `).all(status) as Project[]
   }
@@ -90,9 +96,10 @@ export class ProjectsRepository {
       SELECT p.*, c.name AS client_name
       FROM projects p
       JOIN clients c ON c.id = p.client_id
-      WHERE p.title    LIKE ?
+      WHERE (p.title    LIKE ?
          OR p.location LIKE ?
-         OR c.name     LIKE ?
+         OR c.name     LIKE ?)
+         AND p.is_deleted = 0 AND c.is_deleted = 0
       ORDER BY p.created_at DESC
     `).all(term, term, term) as Project[]
   }
@@ -101,13 +108,14 @@ export class ProjectsRepository {
   create(input: ProjectInput, createdBy: string): Project {
     const id = randomUUID()
     this.db.prepare(`
-      INSERT INTO projects (id, client_id, created_by, title, location, status, start_date, end_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, client_id, created_by, title, contract_value, location, status, start_date, end_date, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.client_id,
       createdBy,
       input.title,
+      input.contract_value ?? 0,
       input.location   ?? null,
       input.status     ?? 'pending',
       input.start_date ?? null,
@@ -124,15 +132,18 @@ export class ProjectsRepository {
         client_id  = COALESCE(?, client_id),
         title      = COALESCE(?, title),
         location   = ?,
+        contract_value = ? ,
         status     = COALESCE(?, status),
         start_date = ?,
         end_date   = ?,
-        notes      = ?
-      WHERE id = ?
+        notes      = ?,
+        is_synced = 0
+      WHERE id = ? AND is_deleted = 0
     `).run(
       input.client_id  ?? null,
       input.title      ?? null,
       input.location   ?? null,
+      input.contract_value ?? 0,
       input.status     ?? null,
       input.start_date ?? null,
       input.end_date   ?? null,
@@ -145,7 +156,7 @@ export class ProjectsRepository {
   // ── UPDATE STATUS ONLY ────────────────────────────────────
   // Quick status change without opening the full edit form.
   updateStatus(id: string, status: string): Project | undefined {
-    this.db.prepare(`UPDATE projects SET status = ? WHERE id = ?`).run(status, id)
+    this.db.prepare(`UPDATE projects SET status = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(status, id)
     return this.getById(id)
   }
   fullDelete(id:string):{success:boolean, error?:string}{
@@ -155,35 +166,37 @@ export class ProjectsRepository {
   }
 cascadeDelete(id: string): { success: boolean; error?: string } { 
   console.log('Attempting cascade delete for project ID:', id)
-    const hasMaterials = this.db.prepare(`SELECT * FROM material_issues WHERE project_id = ? LIMIT 1`).get(id)
-    const hasAttendance = this.db.prepare(`SELECT 1 FROM attendance WHERE project_id = ? LIMIT 1`).get(id)
+    const hasMaterials = this.db.prepare(`SELECT * FROM material_issues WHERE project_id = ? AND is_deleted = 0 LIMIT 1`).get(id)
+    const hasAttendance = this.db.prepare(`SELECT 1 FROM attendance WHERE project_id = ? AND is_deleted = 0 LIMIT 1`).get(id)
     console.log('Has linked materials?', !!hasMaterials)
     console.log('Has linked attendance records?', !!hasAttendance)
 
+    // -------------------------------------------
+    if (hasMaterials || hasAttendance) {
+      console.log('Cannot delete project with linked materials or attendance records')
+      return { success: false, error: 'Project has linked materials or attendance records' }
+    }
+    
+    // ------------------------------------------
+
     const run = this.db.transaction(() => {
-    this.db.prepare(`DELETE FROM sub_project_allocations
-      WHERE sub_project_id IN (SELECT id FROM sub_projects WHERE project_id = ?)`).run(id)
-    this.db.prepare(`DELETE FROM sub_projects        WHERE project_id = ?`).run(id)
-    this.db.prepare(`DELETE FROM project_allocations WHERE project_id = ?`).run(id)
-    this.db.prepare(`DELETE FROM material_issues     WHERE project_id = ?`).run(id)
-    this.db.prepare(`DELETE FROM attendance          WHERE project_id = ?`).run(id)
-    this.db.prepare(`DELETE FROM projects            WHERE id = ?`).run(id)
+    this.db.prepare(`UPDATE sub_project_allocations SET is_deleted = 1, is_synced = 0
+      WHERE sub_project_id IN (SELECT id FROM sub_projects WHERE project_id = ? AND is_deleted = 0) AND is_deleted = 0`).run(id)
+    this.db.prepare(`UPDATE sub_projects SET is_deleted = 1, is_synced = 0 WHERE project_id = ? AND is_deleted = 0`).run(id)
+    this.db.prepare(`UPDATE project_allocations SET is_deleted = 1, is_synced = 0 WHERE project_id = ? AND is_deleted = 0`).run(id)
+    this.db.prepare(`UPDATE material_issues SET is_deleted = 1, is_synced = 0    WHERE project_id = ? AND is_deleted = 0`).run(id)
+    this.db.prepare(`UPDATE attendance SET is_deleted = 1, is_synced = 0         WHERE project_id = ? AND is_deleted = 0`).run(id)
+    this.db.prepare(`UPDATE projects SET is_deleted = 1, is_synced = 0           WHERE id = ? AND is_deleted = 0`).run(id)
   })
   run()
   return { success: true }
 
-    // if (hasMaterials || hasAttendance) {
-    //   console.log('Cannot delete project with linked materials or attendance records')
-    //   return { success: false, error: 'Project has linked materials or attendance records' }
-    // }
 
-    // const result = this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(id)
-    // return { success: result.changes > 0 }
   }
 
   // ── DELETE ────────────────────────────────────────────────
   delete(id: string): { success: boolean } {
-    const result = this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(id)
+    const result = this.db.prepare(`UPDATE projects SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(id)
     return { success: result.changes > 0 }
   }
 
@@ -191,7 +204,7 @@ cascadeDelete(id: string): { success: boolean; error?: string } {
   // For the dashboard — counts per status in a single query.
   getStatusCounts(): Record<string, number> {
     const rows = this.db.prepare(`
-      SELECT status, COUNT(*) as count FROM projects GROUP BY status
+      SELECT status, COUNT(*) as count FROM projects WHERE is_deleted = 0 GROUP BY status 
     `).all() as { status: string; count: number }[]
 
     return rows.reduce((acc, row) => {

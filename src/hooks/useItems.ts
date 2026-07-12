@@ -1,5 +1,6 @@
 // src/hooks/useItems.ts
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'react-toastify'
 
 export interface Item {
   id: string
@@ -61,22 +62,26 @@ export function useItems() {
     const res = await window.api.items.create(input)
     if (res.success) {
       setItems(prev => [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name)))
+      toast.success("Item added successfully");
       if (input.category && !categories.includes(input.category))
         setCategories(prev => [...prev, input.category!].sort())
       return null
     }
+    toast.error(`${res.error ?? 'Failed to add item'}`)
     return res.error ?? 'Failed to create item'
   }, [categories])
-
+  
   const updateItem = useCallback(async (id: string, input: ItemInput): Promise<string | null> => {
     const res = await window.api.items.update(id, input)
     if (res.success) {
+      toast.success("Item updated successfully");
       setItems(prev => prev.map(i => i.id === id ? res.data : i))
       return null
     }
+    toast.error(`${res.error ?? 'Failed to update item'}`)
     return res.error ?? 'Failed to update item'
   }, [])
-
+  
   const setQuantity = useCallback(async (id: string, qty: number): Promise<string | null> => {
     const res = await window.api.items.setQuantity(id, qty)
     if (res.success) {
@@ -85,10 +90,12 @@ export function useItems() {
     }
     return res.error ?? 'Failed to update quantity'
   }, [])
-
+  
   const deleteItem = useCallback(async (id: string): Promise<string | null> => {
     const res = await window.api.items.delete(id)
-    if (res.success) { setItems(prev => prev.filter(i => i.id !== id)); return null }
+    
+    if (res.success) { setItems(prev => prev.filter(i => i.id !== id)); toast.success("Item deleted successfully"); return null }
+    toast.error(`${res.error ?? 'Failed to delete item'}`)
     return res.error ?? 'Failed to delete item'
   }, [])
 

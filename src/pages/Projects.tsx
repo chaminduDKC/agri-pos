@@ -1,16 +1,18 @@
-// src/pages/Projects.tsx
-
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 
 interface Project {
   id: string
   title: string
+  client_id?: string
   client_name: string
+  contract_value:number | 0,
   status: string
   location: string | null
   start_date: string | null
   end_date: string | null
+  notes?: string | null
   created_at: string
 }
 
@@ -26,7 +28,6 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   cancelled: { bg: '#f3f4f6', color: '#6b7280' },
 }
 
-// ══════════════════════════════════════════════════════════════
 export default function Projects() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
@@ -35,6 +36,7 @@ export default function Projects() {
   const [filter, setFilter]     = useState('all')
   const [showCreate, setShowCreate] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>();
+  const [editingId, setEditingId] = useState<string | null>();
 
   const load = async () => {
     const [projRes, clientRes] = await Promise.all([
@@ -59,16 +61,18 @@ export default function Projects() {
   const handleDelete = async (id: string) => {
     if(!id) return;
     const res = await window.api.projects.delete(id)
-    if (res.success) setProjects(prev => prev.filter(p => p.id !== id))
+    if (res.success) {setProjects(prev => prev.filter(p => p.id !== id)); setDeleteId(""); toast.success("Project deleted successfully")}
     else {
       console.log("Delete failed: ", res.error);
+      toast.error("Failed to delete project")
   }
   }
+
+  const editingProject = editingId ? projects.find(p => p.id === editingId) ?? null : null
 
   return (
     <div style={s.page}>
 
-      {/* Header */}
       <div style={s.header}>
         <div>
           <h1 style={s.title}>Projects</h1>
@@ -112,6 +116,9 @@ export default function Projects() {
       )}
 
       {/* Project cards */}
+      <div style={s.listWrapper}>
+
+     
       <div style={s.grid}>
         {filtered.map(p => {
           const sc = STATUS_COLORS[p.status] ?? STATUS_COLORS.pending
@@ -129,16 +136,17 @@ export default function Projects() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <p style={s.cardTitle}>{p.title}</p>
-                <span style={{ ...s.statusPill, background: sc.bg, color: sc.color }}>
+                <p style={{...s.cardTitle, color:"#22c55e"}}>Rs {p.contract_value?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
+                <span onClick={(e)=> e.stopPropagation()} style={{ ...s.statusPill, background: sc.bg, color: sc.color }}>
                   {p.status}
                 </span>
               </div>
 
               <p style={s.cardClient}>{p.client_name}</p>
-              {p.location   && <p style={s.cardMeta}>📍 {p.location}</p>}
+              {p.location   && <p style={s.cardMeta}> {p.location}</p>}
               {p.start_date && (
                 <p style={s.cardMeta}>
-                  📅 {p.start_date}{p.end_date ? ` → ${p.end_date}` : ''}
+                  {p.start_date}{p.end_date ? ` → ${p.end_date}` : ''}
                 </p>
               )}
 
@@ -147,9 +155,9 @@ export default function Projects() {
                 <span style={s.cardDate}>
                   {new Date(p.created_at).toLocaleDateString()}
                 </span>
-                <button style={s.btnSm}
-                  onClick={e => { e.stopPropagation(); navigate(`/projects/${p.id}`) }}>
-                  Open →
+               <button style={s.btnSm }
+                  onClick={() => {setEditingId(p.id);}}>
+                  Edit
                 </button>
                 <button style={{ ...s.btnSm, color: '#dc2626', borderColor: '#fca5a5' }}
                   onClick={() => {setDeleteId(p.id);}}>
@@ -160,6 +168,7 @@ export default function Projects() {
           )
         })}
       </div>
+       </div>
 
       {/* Create modal */}
       {showCreate && (
@@ -170,6 +179,19 @@ export default function Projects() {
             navigate(`/projects/${project.id}`)
           }}
           onClose={() => setShowCreate(false)}
+        />
+      )}
+
+      {/* Edit modal */}
+      {editingProject && (
+        <EditModal
+          project={editingProject}
+          clients={clients}
+          onSave={updated => {
+            setProjects(prev => prev.map(p => p.id === updated.id ? updated : p))
+            setEditingId(null)
+          }}
+          onClose={() => setEditingId(null)}
         />
       )}
 
@@ -198,9 +220,7 @@ export default function Projects() {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-//  CREATE MODAL
-// ══════════════════════════════════════════════════════════════
+
 function CreateModal({ clients, onCreate, onClose }: {
   clients: Client[]
   onCreate: (project: any) => void
@@ -228,8 +248,8 @@ function CreateModal({ clients, onCreate, onClose }: {
     setSaving(true)
     const res = await window.api.projects.create(form)
     setSaving(false)
-    if (res.success) onCreate(res.data)
-    else setErr(res.error ?? 'Failed to create project')
+    if (res.success) {onCreate(res.data); toast.success("Project created successfully. You'll be redirected to project details page")}
+    else {setErr(res.error ?? 'Failed to create project'); toast.error("Fai;ed create project")}
   }
 
   return (
@@ -294,9 +314,106 @@ function CreateModal({ clients, onCreate, onClose }: {
   )
 }
 
-// ── Styles ─────────────────────────────────────────────────────
+function EditModal({ project, clients, onSave, onClose }: {
+  project: Project
+  clients: Client[]
+  onSave: (project: any) => void
+  onClose: () => void
+}) {
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState<string | null>(null)
+
+  const [form, setForm] = useState({
+    client_id:  project.client_id ?? '',
+    title:      project.title ?? '',
+    location:   project.location ?? '',
+    status:     project.status ?? 'pending',
+    start_date: project.start_date ?? '',
+    end_date:   project.end_date ?? '',
+    notes:      project.notes ?? '',
+  })
+
+  const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [key]: e.target.value }))
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { setErr('Title is required');  return }
+    if (!form.client_id)    { setErr('Client is required'); return }
+    setSaving(true)
+    const res = await window.api.projects.update(project.id, form)
+    setSaving(false)
+    if (res.success) {onSave(res.data); toast.success("Project details updated successfully")}
+    else {setErr(res.error ?? 'Failed to update project'); toast.error("Failed to update project details")}
+  }
+
+  return (
+    <div style={s.overlay} onClick={onClose}>
+      <div style={s.modal} onClick={e => e.stopPropagation()}>
+
+        {/* Modal header */}
+        <div style={s.modalHeader}>
+          <h2 style={s.modalTitle}>Edit project</h2>
+          <button style={s.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        {err && <div style={s.errBox}>{err}</div>}
+
+        {/* Form */}
+        <label style={s.label}>Client *</label>
+        <select style={s.input} value={form.client_id} onChange={set('client_id')} autoFocus>
+          <option value="">Select client...</option>
+          {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+
+        <label style={s.label}>Title *</label>
+        <input style={s.input} value={form.title} onChange={set('title')}
+          placeholder="e.g. Farm irrigation — Phase 1" />
+
+        <label style={s.label}>Location</label>
+        <input style={s.input} value={form.location ?? ''} onChange={set('location')}
+          placeholder="e.g. Kurunegala farm" />
+
+        <div style={s.row}>
+          <div style={{ flex: 1 }}>
+            <label style={s.label}>Start date</label>
+            <input style={s.input} type="date" value={form.start_date ?? ''} onChange={set('start_date')} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={s.label}>End date</label>
+            <input style={s.input} type="date" value={form.end_date ?? ''} onChange={set('end_date')} />
+          </div>
+        </div>
+
+        <label style={s.label}>Status</label>
+        <select style={s.input} value={form.status} onChange={set('status')}>
+          {Object.keys(STATUS_COLORS).map(st => (
+            <option key={st} value={st}>{st.charAt(0).toUpperCase() + st.slice(1)}</option>
+          ))}
+        </select>
+
+        <label style={s.label}>Notes</label>
+        <textarea style={{ ...s.input, height: 72, resize: 'vertical' }}
+          value={form.notes ?? ''} onChange={set('notes')} />
+
+        {/* Footer */}
+        <div style={s.modalFooter}>
+          <button style={s.btnGhost} onClick={onClose} disabled={saving}>Cancel</button>
+          <button style={s.btnPrimary} onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save changes'}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 const s: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 1100 },
+  page: { margin: '0 auto', height:"100%" },
+  listWrapper:{
+     overflowY: 'auto',
+  height: 'calc(100vh - 180px)',
+  },
 
   header: {
     display: 'flex',
@@ -313,14 +430,14 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   sub: {
-    fontSize: 13,
+    fontSize: 15,
     color: 'var(--text-muted)',
     marginTop: 4,
   },
 
   muted: {
     color: 'var(--text-dim)',
-    fontSize: 13,
+    fontSize: 15,
   },
 
   empty: {
@@ -339,7 +456,7 @@ const s: Record<string, React.CSSProperties> = {
 
   tab: {
     padding: '8px 14px',
-    fontSize: 13,
+    fontSize: 14,
     border: 'none',
     background: 'transparent',
     cursor: 'pointer',
@@ -358,7 +475,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   pill: {
-    fontSize: 11,
+    fontSize: 13,
     background: 'var(--surface-2)',
     color: 'var(--text-muted)',
     padding: '1px 7px',
@@ -374,7 +491,7 @@ const s: Record<string, React.CSSProperties> = {
 
   // ── Card
   card: {
-    background: 'var(--surface-2)',
+    background: 'var(--surface)',
     border: '1px solid var(--border-soft)',
     borderRadius: 'var(--radius)',
     padding: 16,
@@ -382,7 +499,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   cardTitle: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: 600,
     margin: '0 0 4px',
     lineHeight: 1.3,
@@ -391,20 +508,21 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   cardClient: {
-    fontSize: 13,
+    fontSize: 18,
     color: 'var(--primary-hover)',
     fontWeight: 500,
     margin: '0 0 4px',
   },
 
   cardMeta: {
-    fontSize: 12,
+    fontSize: 15,
     color: 'var(--text-dim)',
     margin: '2px 0',
   },
 
   statusPill: {
-    fontSize: 11,
+    fontSize: 14,
+    textTransform:"capitalize",
     padding: '3px 9px',
     borderRadius: 20,
     fontWeight: 500,
@@ -422,7 +540,7 @@ const s: Record<string, React.CSSProperties> = {
   },
 
   cardDate: {
-    fontSize: 11,
+    fontSize: 14,
     color: 'var(--text-dim)',
     flex: 1,
   },

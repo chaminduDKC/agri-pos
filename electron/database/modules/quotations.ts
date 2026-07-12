@@ -65,7 +65,8 @@ export class QuotationsRepository {
         p.title AS project_title
       FROM quotations q
       JOIN  clients  c ON c.id = q.client_id
-      LEFT JOIN projects p ON p.id = q.project_id
+      LEFT JOIN projects p ON p.id = q.project_id AND p.is_deleted = 0
+      WHERE q.is_deleted = 0 AND c.is_deleted = 0
       ORDER BY q.created_at DESC
     `).all() as Quotation[]
   }
@@ -79,8 +80,8 @@ export class QuotationsRepository {
         p.title AS project_title
       FROM quotations q
       JOIN  clients  c ON c.id = q.client_id
-      LEFT JOIN projects p ON p.id = q.project_id
-      WHERE q.id = ?
+      LEFT JOIN projects p ON p.id = q.project_id AND p.is_deleted = 0
+      WHERE q.id = ? AND q.is_deleted = 0 AND c.is_deleted = 0
     `).get(id) as Quotation | undefined
 
     if (!quotation) return undefined
@@ -90,7 +91,7 @@ export class QuotationsRepository {
         *,
         (quantity * unit_price) AS line_total
       FROM quotation_items
-      WHERE quotation_id = ?
+      WHERE quotation_id = ? AND is_deleted = 0
       ORDER BY rowid ASC
     `).all(id) as QuotationItem[]
 
@@ -155,8 +156,9 @@ export class QuotationsRepository {
           total_amount = ?,
           valid_until  = ?,
           transport_installation = ?,
-          notes        = ?
-        WHERE id = ?
+          notes        = ?,
+          is_synced = 0
+        WHERE id = ? AND is_deleted = 0
       `).run(
         input.client_id,
         input.project_id  ?? null,
@@ -169,7 +171,7 @@ export class QuotationsRepository {
       )
 
     
-      this.db.prepare(`DELETE FROM quotation_items WHERE quotation_id = ?`).run(id)
+      this.db.prepare(`UPDATE quotation_items SET is_deleted = 1, is_synced = 0 WHERE quotation_id = ? AND is_deleted = 0`).run(id)
 
       for (const item of input.items) {
         this.db.prepare(`
@@ -192,16 +194,33 @@ export class QuotationsRepository {
   }
 
   // ── UPDATE STATUS ─────────────────────────────────────────
-  updateStatus(id: string, status: string): Quotation | undefined {
-    this.db.prepare(`UPDATE quotations SET status = ? WHERE id = ?`).run(status, id)
-    return this.getAll().find(q => q.id === id)
+  // updateStatus(id: string, status: string): Quotation | undefined {
+  //   this.db.prepare(`UPDATE quotations SET status = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(status, id)
+  //   return this.getAll().find(q => q.id === id)
+  // }
+
+
+
+
+
+
+
+    updateStatus(id: string, status: string): Quotation | undefined {
+    this.db.prepare(`UPDATE quotations SET status = ?, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(status, id)
+    return this.db.prepare(`
+      SELECT q.*, c.name AS client_name, p.title AS project_title
+      FROM quotations q
+      JOIN clients c ON c.id = q.client_id
+      LEFT JOIN projects p ON p.id = q.project_id AND p.is_deleted = 0
+      WHERE q.id = ? AND q.is_deleted = 0 AND c.is_deleted = 0
+    `).get(id) as Quotation | undefined
   }
 
   // ── DELETE ────────────────────────────────────────────────
   // Deleting the quotation also deletes its items automatically
   // because of ON DELETE CASCADE on quotation_items.quotation_id
   delete(id: string): { success: boolean } {
-    const result = this.db.prepare(`DELETE FROM quotations WHERE id = ?`).run(id)
+    const result = this.db.prepare(`UPDATE quotations SET is_deleted = 1, is_synced = 0 WHERE id = ? AND is_deleted = 0`).run(id)
     return { success: result.changes > 0 }
   }
 
@@ -212,10 +231,10 @@ export class QuotationsRepository {
       SELECT q.*, c.name AS client_name, p.title AS project_title
       FROM quotations q
       JOIN clients c ON c.id = q.client_id
-      LEFT JOIN projects p ON p.id = q.project_id
-      WHERE c.name  LIKE ?
+      LEFT JOIN projects p ON p.id = q.project_id AND p.is_deleted = 0
+      WHERE (c.name  LIKE ?
          OR p.title LIKE ?
-         OR q.notes LIKE ?
+         OR q.notes LIKE ?) AND c.is_deleted = 0 AND q.is_deleted = 0
       ORDER BY q.created_at DESC
     `).all(term, term, term) as Quotation[]
   }

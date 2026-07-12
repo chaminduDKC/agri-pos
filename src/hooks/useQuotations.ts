@@ -1,5 +1,6 @@
 // src/hooks/useQuotations.ts
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from 'react-toastify'
 
 export interface QuotationItem {
   id: string
@@ -75,25 +76,29 @@ export function useQuotations() {
 
   const createQuotation = useCallback(async (input: QuotationInput): Promise<string | null> => {
     const res = await window.api.quotations.create(input)
-    if (res.success) { setQuotations(prev => [res.data, ...prev]); return null }
+    if (res.success) { setQuotations(prev => [res.data, ...prev]); toast.success("Quotation created successfully."); return null }
+    toast.error(`${res.error ?? 'Failed to create quotation'}`)
     return res.error ?? 'Failed to create quotation'
   }, [])
-
+  
   const updateQuotation = useCallback(async (id: string, input: QuotationInput): Promise<string | null> => {
     const res = await window.api.quotations.update(id, input)
-    if (res.success) { setQuotations(prev => prev.map(q => q.id === id ? res.data : q)); return null }
+    if (res.success) { setQuotations(prev => prev.map(q => q.id === id ? res.data : q)); toast.success("Quotation updated successfully."); return null }
+    toast.error(`${res.error ?? 'Failed to update quotation'}`)
     return res.error ?? 'Failed to update quotation'
   }, [])
 
   const updateStatus = useCallback(async (id: string, status: string): Promise<string | null> => {
     const res = await window.api.quotations.updateStatus(id, status)
-    if (res.success) { setQuotations(prev => prev.map(q => q.id === id ? { ...q, status: status as any } : q)); return null }
+    if (res.success) { setQuotations(prev => prev.map(q => q.id === id ? { ...q, status: status as any } : q)); toast.success("Status updated successfully."); return null }
+    toast.error( `${res.error ?? 'Failed to update status'}`)
     return res.error ?? 'Failed to update status'
   }, [])
-
+  
   const deleteQuotation = useCallback(async (id: string): Promise<string | null> => {
     const res = await window.api.quotations.delete(id)
-    if (res.success) { setQuotations(prev => prev.filter(q => q.id !== id)); return null }
+    if (res.success) { setQuotations(prev => prev.filter(q => q.id !== id)); toast.success("Quotation deleted successfully."); return null }
+    toast.error( `${res.error ?? 'Failed to delete quotation'}`)
     return res.error ?? 'Failed to delete quotation'
   }, [])
 

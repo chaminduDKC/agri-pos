@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('api', {
 
   checkInternet: () => ipcRenderer.invoke('checkInternet'),
   generatePdf: (data:any) => ipcRenderer.invoke('generateQuotationPdf', data),
+  generatePaysheetPdf: (data:any) => ipcRenderer.invoke('generatePaysheetPdf', data), 
+  generateInvoicePdf: (data:any) => ipcRenderer.invoke('generateInvoicePdf', data), 
+  updateCompanyDetails:(data:any)=> ipcRenderer.invoke('updateCompanyDetails', data),
+  getCompanyDetails:()=> ipcRenderer.invoke('getCompanyDetails'),
    auth: {
     login:    (email: string, password: string) => ipcRenderer.invoke('auth:login', email, password),
     logout:   ()                                => ipcRenderer.invoke('auth:logout'),
@@ -57,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
     getByClient:    (clientId: string)        => ipcRenderer.invoke('db:projects:getByClient', clientId),
     search:         (q: string)               => ipcRenderer.invoke('db:projects:search', q),
     getStatusCounts:()                        => ipcRenderer.invoke('db:projects:getStatusCounts'),
+    getAllIncompleteProjects:()                        => ipcRenderer.invoke('db:projects:getAllIncompleteProjects'),
     create:         (input: any)              => ipcRenderer.invoke('db:projects:create', input),
     update:         (id: string, input: any)  => ipcRenderer.invoke('db:projects:update', id, input),
     updateStatus:   (id: string, status: string) => ipcRenderer.invoke('db:projects:updateStatus', id, status),
@@ -129,6 +134,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   subProjects:{
     getByProject: (projectId: string) => ipcRenderer.invoke('db:subProjects:getByProject', projectId),
+    getIncompleteSubProjectsByProject: (projectId: string) => ipcRenderer.invoke('db:subProjects:getIncompleteSubProjectsByProject', projectId),
     getById: (id: string) => ipcRenderer.invoke('db:subProjects:getById', id),
     create: (input: any) => ipcRenderer.invoke('db:subProjects:create', input),
     createChild: (input: any) => ipcRenderer.invoke('db:subProjects:createChild', input),
@@ -139,8 +145,30 @@ contextBridge.exposeInMainWorld('api', {
   childProjects:{
     updateStatus: (id: string, status: string) => ipcRenderer.invoke('db:childProjects:updateStatus', id, status),
 getBySubProject:(subId:string)=> ipcRenderer.invoke('db:childProjects:getBySubProject', subId),
+getIncompleteChildProjectsBySubProject:(subId:string)=> ipcRenderer.invoke('db:childProjects:getIncompleteChildProjectsBySubProject', subId),
 delete:(childId:string)=> ipcRenderer.invoke('db:childProjects:delete', childId),
-create:(input:any)=> ipcRenderer.invoke('db:childProjects:create', input)
+create:(input:any)=> ipcRenderer.invoke('db:childProjects:create', input),
+getById:(id:string)=> ipcRenderer.invoke('db:childProjects:getById', id),
+update:(id:string, input:any)=> ipcRenderer.invoke('db:childProjects:update', id, input)
+  },
+
+  expenses:{
+    createExpenseLog: (input:any) => ipcRenderer.invoke('db:expenses:createExpenseLog', input),
+    getExpenseLogsBySubProject: (subProjectId: string) => ipcRenderer.invoke('db:expenses:getExpenseLogsBySubProject', subProjectId),
+    getExpenseLogsByChildProject: (childProjectId: string) => ipcRenderer.invoke('db:expenses:getExpenseLogsByChildProject', childProjectId),
+    getExpenseLogWorkersBySubProject: (subProjectId: string) => ipcRenderer.invoke('db:expenses:getExpenseLogWorkersBySubProject', subProjectId),
+    getExpenseLogWorkersByChildProject: (childProjectId: string) => ipcRenderer.invoke('db:expenses:getExpenseLogWorkersByChildProject', childProjectId),
+    getExpenseLogsByWorker: (workerId: string, startDate:string, endDate:string) => ipcRenderer.invoke('db:expenses:getExpenseLogsByWorker', workerId, startDate, endDate),
+    deleteExpenseLog: (expenseLogId: string) => ipcRenderer.invoke('db:expenses:deleteExpenseLog', expenseLogId),
+    deleteExpenseLogWorker: (expenseLogWorkerId: string) => ipcRenderer.invoke('db:expenses:deleteExpenseLogWorker', expenseLogWorkerId),
+    getSalaryAdvanceByWorkerAndDatePeriod: (startDate:string, endDate: string, workerId:string) => ipcRenderer.invoke('db:expenses:getSalaryAdvanceByWorkerAndDatePeriod', startDate, endDate, workerId)
+  },
+
+  ledger:{
+    saveDay:(input:any)=> ipcRenderer.invoke('db:ledger:saveDay', input),
+    getDayByDate:(date:string)=> ipcRenderer.invoke('db:ledger:getDayByDate', date),
+    getTodayLedgerRecord:(date:string)=> ipcRenderer.invoke('db:ledger:getTodayLedgerRecord', date),
+    getAllRecords:(pgNumber:number, pgSize:number)=> ipcRenderer.invoke('db:ledger:getAllRecords', pgNumber, pgSize),
   }
 
   
@@ -152,6 +180,24 @@ export interface IElectronAPI {
 
   checkInternet: () => Promise<boolean>
   generatePdf: (data:any) => Promise<{ success: boolean; filePath?: string; error?: string }>
+  generatePaysheetPdf: (data:any) => Promise<{ success: boolean; filePath?: string; error?: string }>
+  generateInvoicePdf: (data:any) => Promise<{ success: boolean; filePath?: string; error?: string }>
+  updateCompanyDetails: (data:any) => Promise<{ success: boolean; error?: string }>
+  getCompanyDetails: () => Promise<{ success: boolean; data?:any, error?: string }>
+
+
+  expenses:{
+    createExpenseLog: (input:any) => Promise<{ success: boolean; data?: any; error?: string }>
+    getExpenseLogsBySubProject: (subProjectId: string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+    getExpenseLogsByChildProject: (childProjectId: string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+    getExpenseLogWorkersBySubProject: (subProjectId: string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+    getExpenseLogWorkersByChildProject: (childProjectId: string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+    getExpenseLogsByWorker: (workerId: string, startDate:string, endDate:string) => Promise<{ success: boolean; data?: any[]; error?: string }>
+    deleteExpenseLog: (expenseLogId: string) => Promise<{ success: boolean; error?: string }>
+    deleteExpenseLogWorker: (expenseLogWorkerId: string) => Promise<{ success: boolean; error?: string }>
+  }
+
+
   clients: {
     getAll:  () => Promise<{ success: boolean; data?: any[]; error?: string }>
     getById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>
@@ -185,6 +231,7 @@ export interface IElectronAPI {
     getByClient: (id: string) => Promise<any>; 
     search: (q: string) => Promise<any>; 
     getStatusCounts: () => Promise<any>; 
+    getAllIncompleteProjects: () => Promise<any>; 
     create: (input: any) => Promise<any>; 
     update: (id: string, input: any) => Promise<any>; 
     updateStatus: (id: string, status: string) => Promise<any>; 
@@ -193,6 +240,7 @@ export interface IElectronAPI {
   },
   subProjects:{
     getByProject: (projectId: string) => Promise<any>;
+    getIncompleteSubProjectsByProject: (projectId: string) => Promise<any>;
     getById: (id: string) => Promise<any>;
     create: (input: any) => Promise<any>;
     createChild: (input: any) => Promise<any>;
@@ -203,8 +251,17 @@ export interface IElectronAPI {
   childProjects:{
     updateStatus: (id: string, status: string) => Promise<any>;
     getBySubProject:(subId:string)=> Promise<any>
+    getIncompleteChildProjectsBySubProject:(subId:string)=> Promise<any>
     delete:(childId:string)=> Promise<any>
     create:(input:any)=> Promise<any>
+    getById:(id:string)=> Promise<any>
+    update:(id:string, input:any)=> Promise<any>
+  },
+  ledger:{
+    saveDay:(input:any)=> Promise<any>
+    getDayByDate:(date:string)=> Promise<any>
+    getTodayLedgerRecord:(date:string)=> Promise<any>
+    getAllRecords:(pgNumber:number, pgSize:number)=> Promise<any>
   }
   
    sync: { getStatus: () => Promise<any>; now: () => Promise<any>; onStatus: (fn: (d: any) => void) => () => void }

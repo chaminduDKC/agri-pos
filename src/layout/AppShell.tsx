@@ -1,15 +1,7 @@
-// src/layout/AppShell.tsx
-// ─────────────────────────────────────────────────────────────
-// This is the persistent shell around every page.
-// The sidebar and topbar never unmount — only <Outlet /> changes
-// when you navigate. Outlet is React Router's placeholder for
-// whatever the current page component is.
-// ─────────────────────────────────────────────────────────────
-
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import { OfflineBanner } from '../components/OfflineBanner'
 
-// Map paths to readable page titles for the top bar
 const PAGE_TITLES: Record<string, string> = {
   '/':           'Dashboard',
   '/clients':    'Clients',
@@ -18,6 +10,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/quotations': 'Quotations',
   '/paysheets':  'Pay Sheets',
   '/invoices':   'Invoices',
+  '/settings':   'Settings',
 }
 
 export default function AppShell() {
@@ -39,6 +32,7 @@ export default function AppShell() {
         <main style={styles.content}>
           <Outlet />
         </main>
+        <OfflineBanner />
       </div>
     </div>
   )
@@ -74,7 +68,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   content: {
     flex: 1,
-    overflow: 'auto',
-    padding: '28px',
+   overflow: 'hidden', 
+    padding: '10px',
   },
 };

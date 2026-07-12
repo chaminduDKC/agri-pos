@@ -52,6 +52,30 @@ const migrations: Record<number, (db: Database.Database) => void> = {
   //     CREATE TABLE IF NOT EXISTS suppliers ( ... );
   //     ALTER TABLE items ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id);
   //   `)
+
+  // 2: (db) => {
+  //   const cols = db.prepare(`PRAGMA table_info(clients)`).all() as { name: string }[]
+  //   const hasRole = cols.some(c => c.name === 'role')
+  //   if (!hasRole) {
+  //     console.log("Added role to client")
+  //     db.exec(`ALTER TABLE clients ADD COLUMN role TEXT DEFAULT 'worker'`)
+  //     console.log("Added role to client.. done")
+  //   }
+  // },
+
+  //   3: (db) => {
+  //   const cols = db.prepare(`PRAGMA table_info(clients)`).all() as { name: string }[]
+  //   const hasRole = cols.some(c => c.name === 'role')
+  //   if (hasRole) {
+  //     console.log("removed role from client")
+      
+  //     db.exec(`ALTER TABLE clients DROP COLUMN role`)
+  //     console.log("Removed role from client.. done")
+  //   }
+  // },
+
+
+
   // },
 
 }
