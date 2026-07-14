@@ -218,6 +218,9 @@ function registerIpcHandlers() {
   // ledgers
 
   ipcMain.handle('db:ledger:saveDay', (_e, input)=> wrap(()=> ledger.saveDay(input)))
+  ipcMain.handle('db:ledger:updateRecord', (_e, id,  input)=> wrap(()=> ledger.updateRecord(id, input)))
+  ipcMain.handle('db:ledger:getChildProjectsByLedgerId', (_e, id)=> wrap(()=> ledger.getChildProjectsByLedgerId(id)))
+  ipcMain.handle('db:ledger:getRecentLedgerRecord', (_e)=> wrap(()=> ledger.getRecentLedgerRecord()))
   ipcMain.handle('db:ledger:getDayByDate', (_e, date)=> wrap(()=> ledger.getDayByDate(date)))
   ipcMain.handle('db:ledger:getTodayLedgerRecord', (_e, date)=> wrap(()=> ledger.getTodayLedgerRecord(date)))
   ipcMain.handle('db:ledger:getAllRecords', (_e, pgNumber, pgSize)=> wrap(()=> ledger.getAllRecords(pgNumber, pgSize)))

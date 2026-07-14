@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS ledger (
   id            TEXT     PRIMARY KEY,
   project_id        TEXT REFERENCES projects(id),
 sub_project_id    TEXT REFERENCES sub_projects(id),
-  date          TEXT     NOT NULL UNIQUE,
+  date                        TEXT NOT NULL,          -- no longer UNIQUE
+  entry_seq                   INTEGER NOT NULL, 
   payment_given REAL     NOT NULL DEFAULT 0,
   balance_returned REAL  NOT NULL DEFAULT 0,
   balance_from_previous_day REAL NOT NULL DEFAULT 0,

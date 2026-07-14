@@ -1,22 +1,15 @@
 import React, { useEffect, useState } from "react"
+import { toast } from "react-toastify";
 
 interface SubProject {
     id: string
     title: string
     location: string
+    ledger_id: string
+    status: string
 }
 
-interface LedgerData {
-    childIds: string[],
-    paymentGiven: number,
-    balanceReturned: number,
-    balanceFromPrevDay: number,
-    balanceToNextDay: number,
-}
-interface ChildProjectRef {
-  id: string;
-  name: string;
-}
+
  
 interface LedgerRecord {
   id: string;
@@ -32,7 +25,7 @@ interface LedgerRecord {
   project_name?: string;
   sub_project_name?: string;
   // TODO(Chamindu): replace with the real completed child_projects for this date
-  completed_child_projects?: ChildProjectRef[];
+  completed_child_projects?: SubProject[];
 }
 const getTodayDateString = () => {
     const now = new Date();
@@ -50,8 +43,10 @@ const Ledger = () => {
     const [childProjects, setChildProjects] = useState<SubProject[]>();
     const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [editingMode, setEditingMode] = useState(false);
+
     const [form, setForm] = useState({
+        
         project_id: "",
         sub_project_id: "",
         date: getTodayDateString(),
@@ -62,25 +57,29 @@ const Ledger = () => {
         completed_project_ids: [] as string[],
     })
     const [ledgerData, setLedgerData] = useState<LedgerRecord[] | undefined>();
+    const [recentLedger, setRecentLedger] = useState<LedgerRecord>();
+    const [editingId, setEditingId] = useState<string>("");
 
     useEffect(() => {
         getAllIncompleteProjects()
-        getTodayLedgerRecord()
+        getRecentLedgerRecord()
     }, [])
 
-    const getTodayLedgerRecord = async () => {
-        const date = getTodayDateString()
-        const res = await window.api.ledger.getTodayLedgerRecord(date);
+    const childProjectsForLedgerId = async (id:string)=>{
+        const res = await window.api.ledger.getChildProjectsByLedgerId(id);
+        if(res.success && res.data){
+            console.log(res.data)
+            setRecentLedger(prev=> {
+                if(!prev) return prev
+                return {...prev, completed_child_projects:res.data}
+            })
+        }
+    }
+    const getRecentLedgerRecord = async () => {
+        const res = await window.api.ledger.getRecentLedgerRecord();
         if (res.success && res.data) {
-            console.log(res)
-            const record = res.data;
-
-            // setForm(prev=> ({
-            //     ...prev,
-            //     today_payment: record.payment_given,
-            //     returned_money:record.balance_returned ,
-            //     completed_child_ids:record.
-            // }))
+            setRecentLedger(res.data) 
+            await childProjectsForLedgerId(res.data.id)       
         }
         else {
             console.log("No way")
@@ -104,6 +103,16 @@ const Ledger = () => {
         const res = await window.api.childProjects.getIncompleteChildProjectsBySubProject(id)
         if (res.success) {
             setChildProjects(res.data)
+            console.log("103")
+            console.log(res.data)
+        }
+    }
+    const getAllChildProjectsForSelectedSubProject = async (id: string) => {
+        console.log("Fetching all childs for id", id)
+        const res = await window.api.childProjects.getBySubProject(id)
+        if (res.success) {
+            setChildProjects(res.data)
+            console.log("113")
             console.log(res.data)
         }
     }
@@ -130,7 +139,7 @@ const Ledger = () => {
     };
 
     const handleSave = async () => {
-        if (!form.date || !form.today_payment || !form.returned_money) {
+        if (!form.date || !form.today_payment) {
             // TODO: show a real validation message in the UI instead of console
             console.warn('Date, payment given, and balance returned are all required.');
             return;
@@ -150,6 +159,7 @@ const Ledger = () => {
             if (res.success) {
                 console.log(res.data)
                 fetchLedgerData(page)
+                getRecentLedgerRecord();
                 handleCancel(); // reset form after a successful save
             } else {
                 console.error('Save failed:', res.error);
@@ -159,8 +169,33 @@ const Ledger = () => {
         }
     };
 
+    const handleUpdate = async ()=>{
+        if(!editingId) {toast.error("No id selected"); return}
+        console.log("Form to update is ", form)
+        console.log("Form to update id is ", editingId)
+
+        try {
+            const res = await window.api.ledger.updateRecord(editingId, {
+                date: form.date,
+                paymentGiven: Number(form.today_payment),
+                balanceReturned: Number(form.returned_money),
+                completedChildIds: form.completed_child_ids,
+                projectId:form.project_id,
+                subProjectId:form.sub_project_id
+            })
+        if(res.success){
+            toast.success("Record updated successfully")
+        } else {
+            console.log(res)
+            toast.error("Failed to update record")
+
+        }
+        } catch (error) {
+            console.log(error)
+        }
+        
+    }
     const fetchLedgerData = async (pageNum: number) => {
-    setLoading(true);
     const res = await window.api.ledger.getAllRecords(pageNum, PAGE_SIZE);
 
     if (res.success) {
@@ -168,7 +203,6 @@ const Ledger = () => {
       setLedgerData(res.data.rows);
       setTotalPages(res.data.totalPages);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -219,7 +253,7 @@ const Ledger = () => {
 
                 <div style={s.fieldBox}>
                     <label htmlFor="date" style={s.inputLabel}>Date</label>
-                    <input type="date" onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))} value={form.date} style={s.input} />
+                    <input type="date" disabled={editingMode} onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))} value={form.date} style={s.input} />
                 </div>
                 <div style={s.fieldBox}>
                     <label htmlFor="payment" style={s.inputLabel}>Today Paid Amount</label>
@@ -297,6 +331,7 @@ const Ledger = () => {
                         <div style={s.fieldBox}>
                             <label htmlFor="payment" style={s.inputLabel}>Select Project</label>
                             <select
+                            disabled={editingMode}
                                 style={s.input}
                                 value={form.project_id}
                                 onChange={e => {
@@ -316,10 +351,14 @@ const Ledger = () => {
                         <div style={s.fieldBox}>
                             <label htmlFor="payment" style={s.inputLabel}>Select Sub Project</label>
                             <select
+                            disabled={editingMode}
                                 style={s.input}
                                 value={form.sub_project_id}
                                 onChange={e => {
                                     setForm(f => ({ ...f, sub_project_id: e.target.value }))
+                                    if(editingMode){
+                                        getAllChildProjectsForSelectedSubProject(e.target.value)
+                                    }
                                     getChildProjectsForSelectedSubProject(e.target.value)
                                 }}
                             >
@@ -331,7 +370,10 @@ const Ledger = () => {
                                 ))}
                             </select>
                         </div>
-                        <div style={s.childProjectList}>
+
+                            
+
+ <div style={s.childProjectList}>
                             {childProjects?.length === 0 ? (
                                 <p style={s.inputLabel}>No Child Projects Available</p>
                             ) : (
@@ -349,22 +391,103 @@ const Ledger = () => {
                                     return (
                                         <div key={p.id} style={s.checkboxRow}>
                                             <input type="checkbox" id={p.id} checked={isChecked} onChange={toggleChecked} />
-                                            <label style={s.inputLabel} htmlFor={p.id}>{p.title}</label>
+                                            <label style={s.inputLabel} htmlFor={p.id}>{p.title} at {p.location} currently {p.status}</label>
                                         </div>
                                     );
                                 })
                             )}
                         </div>
+
+
+
+                       
                         <div style={s.buttonRow}>
-                            <button type="button" style={s.cancelButton} onClick={handleCancel}>Cancel</button>
-                            <button type="button" style={s.saveButton} onClick={handleSave}>Save</button>
+                            <button type="button" style={s.cancelButton} onClick={()=> {handleCancel(), setEditingMode(false)}}>Cancel</button>
+                            {
+                                editingMode ? (
+
+                                    <button type="button" style={s.saveButton} onClick={handleUpdate}>Save Changes</button>
+                                ) : (
+
+                                    <button type="button" style={s.saveButton} onClick={handleSave}>Save</button>
+                                )
+                            }
                         </div>
                     </div>
                 )}
 
             </div>
             <div style={s.previewCard}>
-                <div style={s.previewHeader}>Today's Summary</div>
+                {form.project_id === "" && recentLedger ? (
+                    
+                    <div>
+                         <div style={s.previewHeader}>Recent Record</div>
+                            <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Date</span>
+                    <span style={s.previewValue}>{recentLedger.date || '—'}</span>
+                </div>
+
+                <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Payment Given</span>
+                    <span style={s.previewValue}>
+                        Rs. {Number(recentLedger.payment_given || 0).toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </span>
+                </div>
+
+                <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Balance Returned</span>
+                    <span style={s.previewValue}>
+                        Rs. {Number(recentLedger.balance_returned || 0).toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </span>
+                </div>
+
+                <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Total Cost</span>
+                    <span style={s.previewValueHighlight}>
+                        Rs. {((recentLedger.balance_from_previous_day + recentLedger.payment_given) - (recentLedger.balance_returned)).toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </span>
+                </div>
+
+                <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Balance to Next Day</span>
+                    <span style={s.previewValueHighlight}>
+                        Rs. {recentLedger.balance_to_next_day.toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </span>
+                </div>
+
+                <div style={s.previewDivider} />
+
+                <div style={s.previewLabel}>
+                    Completed Child Projects ({recentLedger.completed_child_projects?.length})
+                </div>
+                {recentLedger?.completed_child_projects?.length === 0 ? (
+                    <p style={s.mutedText}>No Selected Child Projects</p>
+                ) : (
+                    <ul style={s.previewList}>
+                        {recentLedger?.completed_child_projects?.map(id => {
+                            console.log("Row ia", id)
+                            return (
+                            <li key={id.id}>{id?.title ?? id.id}</li>
+                        );
+                        })}
+                    </ul>
+                )}
+                    </div>
+                ) : (
+                    <div>
+                         <div style={s.previewHeader}>Record's Preview</div>
 
                 <div style={s.previewRow}>
                     <span style={s.previewLabel}>Date</span>
@@ -420,18 +543,22 @@ const Ledger = () => {
                     <p style={s.mutedText}>None selected yet</p>
                 ) : (
                     <ul style={s.previewList}>
-                        {form.completed_child_ids.map(id => {
-                            const child = childProjects?.find(c => c.id === id);
-                            return <li key={id}>{child?.title ?? id}</li>;
+                        {recentLedger?.completed_child_projects?.map(id => {
+                            
+                            return <li key={id.id}>{id.title ?? id}</li>;
                         })}
                     </ul>
                 )}
+                    </div>
+                )}
+               
             </div>
             {/* //////////////////////////////////////////////// */}
             <div style={s.wrapper}>
                 <table style={s.table}>
       <thead>
         <tr>
+          <th style={s.th}></th>
           <th style={s.th}>Date</th>
           
           <th style={s.th}>Opening Balance</th>
@@ -446,7 +573,44 @@ const Ledger = () => {
       <tbody>
         {ledgerData?.map((r:LedgerRecord, idx:number) => (
           <tr key={idx}>
-            <td style={s.td}>{r.date}</td>
+            <td style={s.td}>
+  {idx !== 10  && (
+    <button
+      onClick={async () => {
+        // 1. get the sub-projects for this record's project (so the dropdown is populated too)
+        await getSubProjectsForSelectedProject(r.project_id);
+        setEditingMode(true)
+        setEditingId(r.id);
+        // 2. get the checkbox list — all child projects under this sub project
+        await getAllChildProjectsForSelectedSubProject(r.sub_project_id);
+        // currently filtered with form.completedids. change it to all childs on that sub
+
+        // 3. get which child ids were actually completed on this ledger row
+        const res = await window.api.ledger.getChildProjectsByLedgerId(r.id);
+        //const res = await window.api.childProjects.getBySubProject(r.sub_project_id);
+        
+        const completedIds = res.success && res.data
+          ? res.data.map((c: SubProject) => c.id)
+          : [];
+
+        setForm(prev => ({
+          ...prev,
+          date: r.date,
+          today_payment: r.payment_given,
+          project_id: r.project_id,
+          returned_money: r.balance_returned,
+          sub_project_id: r.sub_project_id,
+          completed_child_ids: completedIds,
+        }));
+
+        setFilterLevel('child'); // so the child-project section actually renders
+      }}
+    >
+      Edit
+    </button>
+  )}
+</td>
+            <td style={s.td}> {r.date}</td>
            
             <td style={s.td}>{r.balance_from_previous_day}</td>
             <td style={s.td}>{r.payment_given}</td>
@@ -481,6 +645,7 @@ const Ledger = () => {
         </button>
       </div>
             </div>
+            
         </div>
     )
 }
@@ -500,23 +665,31 @@ const s: Record<string, React.CSSProperties> = {
         borderRadius: '10px',
         padding: '16px 20px',
     },
+     overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  formPanel: { background: '#111827', border: '1px solid #374151', borderRadius: 10, padding: 10, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto' },
+  formTitle: { fontSize: 15, fontWeight: 700, color: '#e5e7eb', margin: '0 0 18px' },
 pagination: {
-  display: 'flex',
+  position: 'absolute',
   alignItems: 'center',
+  right:0,
+  bottom:0,
   justifyContent: 'flex-end',
   gap: 12,
-  marginTop: 12,
+  marginBottom: 12,
+  
 },
 pageBtn: {
   background: 'transparent',
-  border: '1px solid var(--border-color)',
+  border: '1px solid #374151',
+  padding: "4px 10px",
   color: 'var(--text-primary)',
   borderRadius: 6,
-  padding: '5px 12px',
+  
   fontSize: 14,
   cursor: 'pointer',
 },
 pageInfo: {
+    margin:"0px 10px",
   fontSize: 14,
   color: 'var(--text-secondary)',
 },
@@ -657,6 +830,7 @@ pageInfo: {
         cursor: 'pointer',
     },
      wrapper: {
+        position:"relative",
     background: 'var(--bg-secondary, #1e1f24)',
     border: '1px solid var(--border-color, #2c2d33)',
     borderRadius: 10,
