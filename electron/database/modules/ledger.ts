@@ -94,7 +94,7 @@ console.log(input)
                                         balance_to_next_day = ?,
                                         is_synced = 0
                                         WHERE id = ? AND is_deleted = 0
-      `).run( input.date, input., input.balanceReturned, input.balanceReturned, existingRecord.id)
+      `).run( input.date, input.paymentGiven, input.balanceReturned, input.balanceReturned, existingRecord.id)
   
 
          this.db.prepare(`

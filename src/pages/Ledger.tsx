@@ -428,6 +428,15 @@ const Ledger = () => {
                 </div>
 
                 <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Balance From Previous Day</span>
+                    <span style={s.previewValue}>
+                        Rs. {Number(recentLedger.balance_from_previous_day || 0).toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </span>
+                </div>
+                <div style={s.previewRow}>
                     <span style={s.previewLabel}>Payment Given</span>
                     <span style={s.previewValue}>
                         Rs. {Number(recentLedger.payment_given || 0).toLocaleString('en-US', {
@@ -477,7 +486,6 @@ const Ledger = () => {
                 ) : (
                     <ul style={s.previewList}>
                         {recentLedger?.completed_child_projects?.map(id => {
-                            console.log("Row ia", id)
                             return (
                             <li key={id.id}>{id?.title ?? id.id}</li>
                         );
@@ -494,6 +502,15 @@ const Ledger = () => {
                     <span style={s.previewValue}>{form.date || '—'}</span>
                 </div>
 
+                <div style={s.previewRow}>
+                    <span style={s.previewLabel}>Balance From Previous Day</span>
+                    <span style={s.previewValue}>
+                        Rs. {Number(recentLedger?.balance_from_previous_day || 0).toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                        })}
+                    </span>
+                </div>
                 <div style={s.previewRow}>
                     <span style={s.previewLabel}>Payment Given</span>
                     <span style={s.previewValue}>
@@ -537,15 +554,16 @@ const Ledger = () => {
                 <div style={s.previewDivider} />
 
                 <div style={s.previewLabel}>
-                    Completed Child Projects ({form.completed_child_ids.length})
+                    Completed Child Projects ddd ({form.completed_child_ids.length})
                 </div>
                 {form.completed_child_ids.length === 0 ? (
                     <p style={s.mutedText}>None selected yet</p>
                 ) : (
                     <ul style={s.previewList}>
-                        {recentLedger?.completed_child_projects?.map(id => {
+                        {form?.completed_child_ids?.map(id => {
+                            const child = childProjects?.find((ch:SubProject)=> ch.id === id)
                             
-                            return <li key={id.id}>{id.title ?? id}</li>;
+                            return <li key={id}>{child?.title ?? id}</li>;
                         })}
                     </ul>
                 )}
@@ -583,8 +601,14 @@ const Ledger = () => {
         setEditingId(r.id);
         // 2. get the checkbox list — all child projects under this sub project
         await getAllChildProjectsForSelectedSubProject(r.sub_project_id);
+        
         // currently filtered with form.completedids. change it to all childs on that sub
 
+        const ledgerRes = await window.api.ledger.getById(r.id)
+        if(ledgerRes.success){
+            console.log(ledgerRes)
+            setRecentLedger(ledgerRes.data)
+        }
         // 3. get which child ids were actually completed on this ledger row
         const res = await window.api.ledger.getChildProjectsByLedgerId(r.id);
         //const res = await window.api.childProjects.getBySubProject(r.sub_project_id);
