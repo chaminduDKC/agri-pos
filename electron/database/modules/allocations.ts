@@ -164,7 +164,7 @@ export class SubProjectsRepository {
   }
 
   getIncompleteSubProjectsByProject(id:string):SubProject[]{
-    return this.db.prepare(`SELECT * FROM sub_projects WHERE project_id = ?`).all(id) as SubProject[]
+    return this.db.prepare(`SELECT * FROM sub_projects WHERE project_id = ? AND status != 'completed'`).all(id) as SubProject[]
   }
 
   getByProject(projectId: string): SubProject[] {

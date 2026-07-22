@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS ledger_audit (
   old_balance_returned REAL,
   new_payment_given REAL NOT NULL,
   new_balance_returned REAL NOT NULL,
-   is_deleted INTEGER DEFAULT 0,
+  is_deleted INTEGER DEFAULT 0,
   is_synced INTEGER DEFAULT 0,
   edited_at     TEXT     NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS projects (
   created_by  TEXT     NOT NULL REFERENCES users(id),
   title       TEXT     NOT NULL,
   location    TEXT,
+  cost FLOAT DEFAULT 0,
+   ledger_id   TEXT ,
   contract_value REAL DEFAULT 0,
   status      TEXT     DEFAULT 'pending'
                        CHECK(status IN ('pending','active','completed','cancelled')),
@@ -94,6 +96,7 @@ CREATE TABLE IF NOT EXISTS projects (
   end_date    TEXT,
   notes       TEXT,
   is_deleted INTEGER DEFAULT 0,
+  completed_date       TEXT,
   is_synced INTEGER DEFAULT 0,
   created_at  TEXT     DEFAULT (datetime('now', 'localtime'))
 );
@@ -214,7 +217,10 @@ CREATE TABLE IF NOT EXISTS sub_projects (
   project_id  TEXT     NOT NULL REFERENCES projects(id),
   title       TEXT     NOT NULL,
   location    TEXT     NOT NULL,
+   ledger_id   TEXT ,
   contract_value REAL DEFAULT 0,
+  completed_date       TEXT,
+  cost FLOAT DEFAULT 0,
   status      TEXT     DEFAULT 'pending'
                        CHECK(status IN ('pending','in_progress','completed')),
   notes       TEXT,
@@ -230,6 +236,7 @@ CREATE TABLE IF NOT EXISTS child_projects (
   project_id  TEXT     NOT NULL REFERENCES projects(id),
   ledger_id   TEXT ,
    contract_value REAL DEFAULT 0,
+  cost FLOAT DEFAULT 0,
   title       TEXT     NOT NULL,
   location    TEXT     NOT NULL,
   status      TEXT     DEFAULT 'pending'

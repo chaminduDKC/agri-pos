@@ -169,6 +169,8 @@ update:(id:string, input:any)=> ipcRenderer.invoke('db:childProjects:update', id
     updateRecord:(id:string, input:any)=> ipcRenderer.invoke('db:ledger:updateRecord', id, input),
     getDayByDate:(date:string)=> ipcRenderer.invoke('db:ledger:getDayByDate', date),
     getChildProjectsByLedgerId:(id:string)=> ipcRenderer.invoke('db:ledger:getChildProjectsByLedgerId', id),
+    getSubProjectsByLedgerId:(id:string)=> ipcRenderer.invoke('db:ledger:getSubProjectsByLedgerId', id),
+    getProjectsByLedgerId:(id:string)=> ipcRenderer.invoke('db:ledger:getProjectsByLedgerId', id),
     getById:(id:string)=> ipcRenderer.invoke('db:ledger:getById', id),
     getTodayLedgerRecord:(date:string)=> ipcRenderer.invoke('db:ledger:getTodayLedgerRecord', date),
     getRecentLedgerRecord:()=> ipcRenderer.invoke('db:ledger:getRecentLedgerRecord'),
@@ -267,6 +269,8 @@ export interface IElectronAPI {
     getDayByDate:(date:string)=> Promise<any>
     getTodayLedgerRecord:(date:string)=> Promise<any>
     getChildProjectsByLedgerId:(id:string)=> Promise<any>
+    getSubProjectsByLedgerId:(id:string)=> Promise<any>
+    getProjectsByLedgerId:(id:string)=> Promise<any>
     getById:(id:string)=> Promise<any>
     getRecentLedgerRecord:()=> Promise<any>
     getAllRecords:(pgNumber:number, pgSize:number)=> Promise<any>

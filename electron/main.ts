@@ -220,6 +220,8 @@ function registerIpcHandlers() {
   ipcMain.handle('db:ledger:saveDay', (_e, input)=> wrap(()=> ledger.saveDay(input)))
   ipcMain.handle('db:ledger:updateRecord', (_e, id,  input)=> wrap(()=> ledger.updateRecord(id, input)))
   ipcMain.handle('db:ledger:getChildProjectsByLedgerId', (_e, id)=> wrap(()=> ledger.getChildProjectsByLedgerId(id)))
+  ipcMain.handle('db:ledger:getSubProjectsByLedgerId', (_e, id)=> wrap(()=> ledger.getSubProjectsByLedgerId(id)))
+  ipcMain.handle('db:ledger:getProjectsByLedgerId', (_e, id)=> wrap(()=> ledger.getProjectsByLedgerId(id)))
   console.log('Registering db:ledger:getById handler');
   ipcMain.handle('db:ledger:getById', (_e, id)=> wrap(()=> ledger.getById(id)))
   ipcMain.handle('db:ledger:getRecentLedgerRecord', (_e)=> wrap(()=> ledger.getRecentLedgerRecord()))

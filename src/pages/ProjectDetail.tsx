@@ -11,7 +11,7 @@ interface Project {
 
 interface SubProject {
   id: string; project_id: string; parent_id: string | null
-  contract_value: number | 0; location: string | null
+  contract_value: number | 0; location: string | null; cost:number;
   title: string; status: string; notes: string | null; level: number
 }
 
@@ -325,6 +325,8 @@ export default function ProjectDetail() {
   const getChildProjectsBySubProject = async (subId: string) => {
     try {
       const res = await window.api.childProjects.getBySubProject(subId);
+      console.log("New Data")
+      console.log(res.data)
       if (res.success) setChildren(res.data)
       else toast.error(res.error ?? "Failed to load child projects")
     } catch (error) {
@@ -810,6 +812,7 @@ const handleEditChild = async ()=>{
                   style={isSelected ? s.cardActive : s.card}
                   onClick={() => { setSelectedSubId(sub.id); getChildProjectsBySubProject(sub.id) }}>
                   <p style={{color:"#22c55e"}}>{sub.contract_value !== undefined || sub.contract_value !== null || sub.contract_value > 0 ? `Contract Value: Rs ${sub.contract_value?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}` : 'Contract Value: N/A'}</p>
+                  <p style={{color:"#22c55e"}}>Cost {sub.cost}</p>
 
                   <div style={s.cardRow} >
                     <p style={{ ...s.cardTitle, color: isSelected ? '#818cf8' : '#e5e7eb' }}>{sub.title}</p>
@@ -880,6 +883,7 @@ const handleEditChild = async ()=>{
               return (
                 <div key={child.id} style={s.card}>
                     <p style={{color:"#22c55e"}}>{child.contract_value !== undefined ? `Contract Value: Rs ${child.contract_value?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}` : 'Contract Value: N/A'}</p>
+                    <p>Cost {child.cost}</p>
                   <div style={s.cardRow}>
                     <p style={s.cardTitle}>{child.title}</p>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

@@ -8,6 +8,7 @@ interface Project {
   client_id?: string
   client_name: string
   contract_value:number | 0,
+  cost:number | 0,
   status: string
   location: string | null
   start_date: string | null
@@ -137,6 +138,7 @@ export default function Projects() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <p style={s.cardTitle}>{p.title}</p>
                 <p style={{...s.cardTitle, color:"#22c55e"}}>Rs {p.contract_value?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
+                <p style={{...s.cardTitle, color:"#22c55e"}}>Cost {p.cost?.toLocaleString('en-LK', {minimumFractionDigits:2, maximumFractionDigits:2})}</p>
                 <span onClick={(e)=> e.stopPropagation()} style={{ ...s.statusPill, background: sc.bg, color: sc.color }}>
                   {p.status}
                 </span>
@@ -485,7 +487,7 @@ const s: Record<string, React.CSSProperties> = {
   // ── Grid
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
     gap: 14,
   },
 
